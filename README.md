@@ -1,239 +1,83 @@
-# Mailreceiver
+# Mail Dispatcher
 
-Sistema RPA de dos servicios que extrae correos de Outlook Web mediante automatizacion de navegador y los distribuye entre especialistas usando un algoritmo de asignacion por deficit.
+An evolving mailbox intake and workload assignment platform. The intended system connects to authorized Microsoft 365 mailboxes through **Microsoft Graph**, keeps a consistent record of incoming work, and distributes cases across available specialists.
 
-## Quick start
+> **Project status: architecture transition.** The repository currently contains a working-area legacy Python/Playwright implementation. The Microsoft Graph monorepo described below is a **proposal, not a running replacement**. No migration or deployment has occurred.
 
-```bash
-# Activar venv, luego:
-litestar --app api.app:app run --reload
+## Direction
+
+The next version aims to:
+
+- Read folders, messages, and conversation metadata through Microsoft Graph instead of automating Outlook's web interface.
+- Synchronize mailbox changes incrementally and persist normalized records in PostgreSQL.
+- Keep workload assignment as a separate business capability, preserving the intent of the existing Weighted Deficit Dispatch (WDD) algorithm.
+- Provide a web interface for intake visibility, assignments, specialist availability, and processing status.
+- Make external operations observable, retryable where safe, and auditable without exposing mailbox contents in logs.
+
+Microsoft Graph is a provider integration, not the domain model. A conversation is an application-level aggregate of messages; it is **not** a Graph endpoint for moving whole conversations. Write operations must account for individual messages and permissions.
+
+## Proposed monorepo
+
+```text
+mail-dispatcher/
+├── backend/            # Planned TypeScript/Fastify API, Graph adapter, jobs, and assignment logic
+├── frontend/           # Planned TypeScript/React web application
+├── database/           # Planned PostgreSQL schema and versioned migrations
+├── docs/
+│   └── MIGRATION_PLAN.md
+├── AGENTS.md           # Rules and implementation boundaries for coding agents
+└── README.md
 ```
 
-Un solo comando levanta ambos servicios. La API (puerto 8000) inicia automaticamente el Agent (puerto 8001) como subproceso.
+These directories are **documentation placeholders**. They do not yet contain the new services or database migration scripts. Legacy source files remain in their existing locations until a separate, reviewed migration.
 
-Swagger UI: `http://localhost:8000/schema/swagger`
+## Target architecture
 
----
-
-## Arquitectura
-
-```
-                          ┌──────────────────────────────────┐
-  Cliente                 │           API (8000)             │
-  (dashboard,  ─── HTTP ──│  Litestar REST                   │
-   scheduler)             │  - Endpoints por aplicacion      │
-                          │  - Dispatch (WDD)                │
-                          │  - CRUD especialistas/ventanas   │
-                          └────────────┬─────────────────────┘
-                                       │ HTTP interno
-                          ┌────────────▼─────────────────────┐
-                          │          Agent (8001)             │
-                          │  Litestar + Playwright            │
-                          │  - Login en Outlook               │
-                          │  - Scraping de carpetas           │
-                          │  - Extraccion de cuerpo HTML      │
-                          └────────────┬─────────────────────┘
-                                       │
-                          ┌────────────▼─────────────────────┐
-                          │        PostgreSQL                 │
-                          │  asyncpg + SQLAlchemy async       │
-                          └──────────────────────────────────┘
+```mermaid
+flowchart LR
+    UI["Web application"] --> HTTP["Backend HTTP interface"]
+    HTTP --> APP["Application workflows"]
+    JOBS["Synchronization worker"] --> APP
+    GRAPH["Microsoft Graph"] <--> ADAPTER["Graph adapter"]
+    ADAPTER <--> APP
+    APP --> DOMAIN["Domain: intake and WDD assignment"]
+    APP <--> DB[("PostgreSQL")]
 ```
 
-La API es el punto de entrada unico. El Agent es un servicio interno que solo la API consume.
+- **Backend:** TypeScript with Fastify is the proposed baseline. Define provider-neutral application ports for mailbox access and persistence; connect infrastructure implementations at bootstrap.
+- **Frontend:** React and TypeScript are proposed. It communicates with the backend, never directly with mailbox credentials or database connections.
+- **Database:** PostgreSQL owns durable synchronization cursors, normalized messages and conversations, specialist configuration, assignments, and operation history.
+- **Authentication:** use supported Microsoft Entra ID / OAuth flows with least-privilege delegated or application permissions, selected after the mailbox access scenario is confirmed. Do not automate sign-in or extract browser tokens.
 
----
+## Migration principles
 
-## Conceptos clave
+1. Establish an authorized Microsoft Graph authentication path before implementing mailbox reads or writes.
+2. Prove folder/message retrieval and pagination; then implement per-folder delta synchronization and durable checkpoints.
+3. Preserve WDD behavior through characterization tests before deciding how to port its implementation.
+4. Introduce explicit idempotency keys, operation history, and recovery for assignment and mailbox changes.
+5. Cut over only after tests and operator-controlled validation; retire the Playwright path in a **later** change.
 
-### Aplicacion
+The source of truth for execution order, constraints, and acceptance criteria is [the migration plan](docs/MIGRATION_PLAN.md). Coding agents must also read [AGENTS.md](AGENTS.md).
 
-Una aplicacion representa un buzon de Outlook independiente con sus propias credenciales, carpetas y equipo de especialistas. Cada aplicacion tiene endpoints identicos bajo su propio prefijo (`/{app}/...`). Se registran en la tabla `applications`.
+## Existing implementation (legacy)
 
-### RPA: Flujo de scraping
+The current repository still contains:
 
-El Agent ejecuta un pipeline de 5 pasos sobre Outlook Web (outlook.office.com):
+- `api/` — Python/Litestar HTTP service and assignment workflows.
+- `agent/` — Outlook Web browser automation using Playwright.
+- `wdd/` — pure-Python WDD engine and tests, including [its specification](wdd/ALGORITHM.md).
+- `migrations/` and `esquema_mailreceiver.sql` — existing database artifacts.
 
-```
-POST /{app}/unread-conversations
-  │
-  ├─ Paso 1: Login
-  │   Navega a Outlook, inicia sesion si no hay sesion activa.
-  │   Critico: si falla, se aborta.
-  │
-  ├─ Paso 2: Navegar a carpeta
-  │   Recarga Outlook, espera el panel de carpetas, hace click en la carpeta solicitada.
-  │   Extrae el conteo de no leidos del badge de la carpeta.
-  │   Critico: si falla, se aborta.
-  │
-  ├─ Paso 3: Filtrar no leidos
-  │   Aplica el filtro "No leidos" en la UI de Outlook.
-  │   No critico: si falla, el paso 4 extrae todos los correos.
-  │
-  ├─ Paso 4: Scraping de conversaciones
-  │   Loop de scroll incremental sobre el listado virtual (Virtuoso).
-  │   Outlook solo mantiene ~15-20 filas en el DOM, asi que el scraper
-  │   hace scroll, parsea las filas visibles, y repite.
-  │   Extrae: conversation_id, subject, sender, fecha, tags.
-  │   Critico: si falla, se aborta.
-  │
-  └─ Paso 5: Extraccion de cuerpo
-      Para cada conversacion del paso 4, hace click en la fila,
-      espera el panel de lectura y extrae el HTML del cuerpo.
-      No critico: si falla, la conversacion queda con body="".
-```
+The files `CLAUDE.md`, `DEPLOY.md`, `ENDPOINTS_MAP.md`, and `TODO.md` may describe the legacy workflow. They are not implementation instructions for the proposed Graph platform. Running the legacy application may still interact with a real mailbox; no Graph-backed quick-start command exists yet.
 
-Los resultados se persisten con upsert: si el `conversation_id` ya existe se actualiza, si es nuevo se inserta.
+## Status and references
 
-### Folder Config
+This is a public architectural proposal. Prior internal integrations and the earlier **TyFlow** prototype may inform design decisions, but they are not dependencies, and their source or operational settings are not included here.
 
-Mapea carpetas de Outlook a niveles de soporte dentro de una aplicacion. Tabla `folder_config`.
+Official references:
 
-```
-"SOPORTE BASICO"    → nivel 1
-"SOPORTE AVANZADO"  → nivel 2
-```
-
-El nivel determina a que pool de especialistas se enrutan los casos durante el dispatch. Un especialista de nivel 1 solo recibe casos de carpetas configuradas como nivel 1.
-
-### Especialistas
-
-Tabla `especialist`. Cada especialista tiene:
-
-- **code**: identificador unico corto
-- **level**: nivel de soporte que atiende (debe coincidir con folder_config)
-- **load_percentage**: porcentaje fijo de carga (null = auto-distribuir equitativamente)
-- **priority**: desempate cuando dos especialistas tienen el mismo deficit
-
-### Specialist Folder
-
-Mapea cada especialista a su carpeta personal de Outlook dentro de una aplicacion. Tabla `specialist_folders`. Se usa para saber donde mover o marcar correos una vez asignados.
-
-### Work Windows (Ventanas de trabajo)
-
-Una ventana de trabajo define **cuando** y **con que capacidad** un especialista esta disponible para recibir casos. Tabla `work_windows`.
-
-```json
-{
-  "especialist_code": "spec01",
-  "application_code": "mi_app",
-  "load_percentage": 40,
-  "schedule": {
-    "2026-04-28": [{"start": "08:00", "end": "12:00"}],
-    "2026-04-29": [{"start": "08:00", "end": "12:00"}, {"start": "14:00", "end": "17:00"}]
-  }
-}
-```
-
-- Dias no listados = especialista no disponible
-- El `load_percentage` de la ventana puede sobreescribir el del especialista
-- Solo los especialistas con ventana activa **en el momento del dispatch** entran al pool
-- Cada ventana acumula su propio snapshot de deficit (`balance_snapshots`)
-- Al crear una ventana nueva se puede heredar el deficit de una anterior (`inherit_balance_from`)
-
-### WDD: Weighted Deficit Dispatch
-
-Algoritmo de asignacion que distribuye casos entre los especialistas disponibles. Especificacion completa en [`wdd/ALGORITHM.md`](wdd/ALGORITHM.md).
-
-**Idea central**: en cada ronda, sin importar cuantos casos lleguen, el sistema calcula la distribucion ideal y prioriza a quienes mas se han alejado de ella.
-
-```
-deficit(i) = ideal(i) - recibido(i)
-
-ideal(i) = total_casos × (load_percentage(i) / 100)
-```
-
-- **Deficit positivo** → el sistema le debe casos al especialista (prioridad alta)
-- **Deficit negativo** → el especialista esta adelantado (prioridad baja)
-
-El algoritmo asigna caso por caso, recalculando el deficit despues de cada asignacion. Esto garantiza equidad incluso con lotes de tamano impredecible.
-
-**Escalaciones**: cuando un especialista escala un caso a otro, el deficit se ajusta manualmente para mantener la equidad en rondas futuras.
-
-Implementacion: `wdd/engine.py` (standalone, puro Python) + `domain/dispatcher.py` (adapter a DB).
-
-### Assignments (Asignaciones)
-
-Tabla `assignments`. Registro de que conversacion fue asignada a que especialista, en que nivel, y a traves de que ventana de trabajo.
-
-```
-conversacion X  →  especialista spec01  →  nivel 1  →  ventana abc-123
-```
-
-Las asignaciones son el resultado del dispatch. Una conversacion solo se asigna una vez (el dispatcher filtra las ya asignadas). El endpoint `GET /{app}/assignments` permite filtrar por:
-
-- `specialist` / `!specialist` — tiene o no especialista
-- `ticket` / `!ticket` — tiene o no ticket vinculado
-
-### Tickets
-
-Tabla `tickets`. Representa un ticket externo (ej. sistema de gestion) vinculado a una asignacion. Se crean despues de la asignacion y se vinculan via `PUT /dispatch/assignments/{id}/ticket`.
-
-El flujo completo es: **scraping → asignacion → creacion de ticket**.
-
----
-
-## Base de datos
-
-PostgreSQL con asyncpg + SQLAlchemy async. Modelos en `domain/models.py`.
-
-| Tabla | Proposito |
-|-------|-----------|
-| `applications` | Catalogo de aplicaciones. PK = `code` |
-| `conversations` | Correos extraidos. `UNIQUE(conversation_id)` previene duplicados |
-| `especialist` | Especialistas. `UNIQUE(code)` |
-| `folder_config` | Carpeta de Outlook → nivel de soporte por aplicacion |
-| `specialist_folders` | Especialista → carpeta personal de Outlook por aplicacion |
-| `work_windows` | Disponibilidad: schedule JSONB por fecha + slots horarios |
-| `balance_snapshots` | Contadores de deficit por especialista por ventana |
-| `assignments` | Conversacion → especialista, creadas por el dispatcher |
-| `tickets` | Referencias a tickets externos |
-
-Migraciones en `migrations/`, se ejecutan manualmente.
-
----
-
-## Endpoints
-
-Documentacion completa con descripciones de campos en Swagger UI. Referencia de endpoints en `ENDPOINTS_MAP.md`.
-
-### Globales
-
-| Seccion | Proposito |
-|---------|-----------|
-| Applications | CRUD de aplicaciones |
-| Specialists | CRUD de especialistas |
-| Coordinator | Ventanas de trabajo, snapshots de deficit, dashboard de carga |
-| Dispatch | Consultar asignaciones, vincular tickets |
-| Tickets | Crear y listar tickets |
-| Config | Configuracion de scraping y navegador en runtime |
-| Agent | Control del agente de automatizacion |
-
-### Por aplicacion
-
-| Endpoint | Proposito |
-|----------|-----------|
-| `POST /{app}/unread-conversations` | Ejecutar scraping de Outlook |
-| `GET /{app}/conversations` | Consultar conversaciones (filtrable, paginado) |
-| `/{app}/folder-config` | CRUD de mapeo carpeta → nivel |
-| `/{app}/specialists-folder` | CRUD de mapeo especialista → carpeta personal |
-| `POST /{app}/assign-specialists/{level}` | Ejecutar dispatch WDD para un nivel |
-| `GET /{app}/assignments` | Consultar asignaciones con filtros |
-
----
-
-## Configuracion
-
-| Archivo | Contenido |
-|---------|-----------|
-| `.env` | Credenciales de Outlook por aplicacion, URL de PostgreSQL |
-| `storage/config.json` | Configuracion del navegador (viewport, headless, user agent) |
-| `storage/scraping_config.json` | Parametros del loop de scroll, timeouts |
-
----
-
-## Problemas conocidos
-
-- **Virtual scroll**: Outlook solo mantiene ~15-20 filas en el DOM. Filas que salen del viewport durante el scraping pueden perderse en la extraccion de cuerpo.
-- **Filtro no critico**: si Outlook cambia el selector del boton de filtro, el scraping continua sin filtrar (extrae todos los correos, no solo no leidos).
-- **Dark mode**: el HTML extraido puede tener colores de texto blancos y atributos `data-ogsc` de Outlook en modo oscuro.
+- [Microsoft Graph mail overview](https://learn.microsoft.com/en-us/graph/api/resources/mail-api-overview)
+- [Access Microsoft Graph on behalf of a user](https://learn.microsoft.com/en-us/graph/auth-v2-user)
+- [Incremental changes to messages in a folder](https://learn.microsoft.com/en-us/graph/delta-query-messages)
+- [Microsoft Graph throttling guidance](https://learn.microsoft.com/en-us/graph/throttling)
+- [Immutable Outlook identifiers](https://learn.microsoft.com/en-us/graph/outlook-immutable-id)
