@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { GraphProvider } from "../src/infrastructure/graph/provider.js";
-import { msalTokens } from "../src/infrastructure/graph/auth.js";
+import { GraphProvider } from "../src/infrastructure/mail/graph/provider.js";
+import { msalTokens } from "../src/infrastructure/authentication/entra/auth.js";
 const prefix = "https://graph.microsoft.com/v1.0/users/synthetic-mailbox/";
 const delta = prefix + "mailFolders/inbox/messages/delta?$deltatoken=synthetic";
 const full = {

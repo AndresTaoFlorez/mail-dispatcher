@@ -2,11 +2,16 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import pg from "pg";
-import { PostgresStore } from "../src/infrastructure/postgres/store.js";
-import { GraphProvider } from "../src/infrastructure/graph/provider.js";
-import { Intake } from "../src/application/intake.js";
-import { buildServer } from "../src/presentation/server.js";
-import type { MessageChange } from "../src/domain/mail.js";
+import { PostgresMailboxStore } from "../src/infrastructure/mail/postgres/PostgresMailboxStore.js";
+import { GraphProvider } from "../src/infrastructure/mail/graph/provider.js";
+import {
+  composeMailbox,
+  openMailboxWorkspace,
+  sessionOperations,
+} from "../src/composition/mailbox.js";
+import { MailboxSession } from "../src/application/authentication/index.js";
+import { buildServer } from "../src/presentation/http/index.js";
+import type { MessageChange } from "../src/application/synchronization/index.js";
 const database = process.env.TEST_DATABASE_URL;
 const m = (id: string, conversationId = "thread"): MessageChange => ({
   id,
@@ -20,7 +25,7 @@ const m = (id: string, conversationId = "thread"): MessageChange => ({
 async function fixture() {
   const pool = new pg.Pool({ connectionString: database, max: 5 });
   const namespace = "test-" + randomUUID();
-  const store = new PostgresStore(pool, namespace);
+  const store = new PostgresMailboxStore(pool, namespace);
   await store.register("synthetic-tenant", namespace);
   await store.discover([
     { id: "inbox", name: "Inbox", parentId: null },
@@ -265,7 +270,7 @@ test(
         );
       },
     );
-    const intake = new Intake(provider, f.store);
+    const intake = composeMailbox(provider, f.store);
     const token = "synthetic-local-api-token-32-characters";
     const app = buildServer(intake, token);
     const headers = { authorization: `Bearer ${token}` };
@@ -292,6 +297,86 @@ test(
     } finally {
       await app.close();
       await f.close();
+    }
+  },
+);
+
+test(
+  "PostgreSQL: the real composition switches A -> B -> A without losing or crossing sync state",
+  { skip: !database },
+  async () => {
+    const pool = new pg.Pool({ connectionString: database, max: 5 });
+    const tenant = randomUUID();
+    const a = randomUUID(),
+      b = randomUUID();
+    let pageCalls = 0;
+    const request: typeof fetch = async (url) => {
+      const parsed = new URL(String(url));
+      const mailbox = parsed.pathname.split("/")[3];
+      assert.ok(mailbox === a || mailbox === b);
+      if (parsed.pathname.endsWith("/mailFolders"))
+        return new Response(
+          JSON.stringify({
+            value: [{ id: "inbox", displayName: "Inbox", childFolderCount: 0 }],
+          }),
+        );
+      pageCalls++;
+      return new Response(
+        JSON.stringify({
+          value: [
+            {
+              id: "same-message",
+              conversationId: mailbox,
+              subject: "Synthetic",
+              isRead: false,
+            },
+          ],
+          "@odata.deltaLink": `https://graph.microsoft.com/v1.0/users/${mailbox}/mailFolders/inbox/messages/delta?$deltatoken=synthetic`,
+        }),
+      );
+    };
+    const session = new MailboxSession(
+      "graph-scrap",
+      (identity) => openMailboxWorkspace(pool, identity, request),
+      {
+        authorize: async (input) => ({
+          tenantId: tenant,
+          mailboxId: input.mail.startsWith("a@") ? a : b,
+          expiresAt: "2030-01-01T00:00:00Z",
+          tokens: { token: async () => "synthetic" },
+        }),
+      },
+    );
+    const operations = sessionOperations(session);
+    try {
+      await session.login({ mail: "a@example.invalid", password: "synthetic" });
+      await operations.discover();
+      await operations.enqueue("inbox");
+      await operations.tick();
+      const saved = await operations.conversations(10, 0);
+      assert.equal(saved[0].id, a);
+      await session.login({ mail: "b@example.invalid", password: "synthetic" });
+      assert.deepEqual(await operations.conversations(10, 0), []);
+      await operations.discover();
+      await operations.enqueue("inbox");
+      await operations.tick();
+      assert.equal((await operations.conversations(10, 0))[0].id, b);
+      await session.login({ mail: "a@example.invalid", password: "synthetic" });
+      assert.deepEqual(await operations.conversations(10, 0), saved);
+      assert.equal((await operations.jobs())[0].status, "succeeded");
+      assert.equal(await operations.tick(), false);
+      assert.equal(pageCalls, 2);
+      const state = await pool.query(
+        "SELECT cursor FROM intake.sync_state WHERE mailbox_id=$1 AND folder_id=$2",
+        [`${tenant}:${a}`, "inbox"],
+      );
+      assert.ok(state.rows[0].cursor.includes(a));
+    } finally {
+      await pool.query(
+        "DELETE FROM intake.mailboxes WHERE id=ANY($1::text[])",
+        [[`${tenant}:${a}`, `${tenant}:${b}`]],
+      );
+      await pool.end();
     }
   },
 );

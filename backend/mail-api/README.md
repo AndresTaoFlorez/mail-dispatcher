@@ -11,7 +11,25 @@ npm run test -w @mail-dispatcher/mail-api
 npm run build -w @mail-dispatcher/mail-api
 ```
 
-Build output is `backend/mail-api/dist/`. Only bootstrap wires infrastructure adapters; domain/application code has no framework, PostgreSQL, or browser dependencies.
+Build output is `backend/mail-api/dist/`. Clean Architecture is mandatory and implemented: only `src/composition/` selects concrete adapters; domain/application code has no framework, PostgreSQL, browser, or HTTP-client dependencies.
+
+## Mandatory architecture
+
+| Area                           | Responsibilities                                                                                                |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `domain/mail/`                 | Mail metadata meaning, identity invariants and subject normalization; no operational errors or provider cursors |
+| `application/mail/`            | Folder discovery, folder/conversation queries and narrow reader/source/catalog ports                            |
+| `application/synchronization/` | Enqueue, status queries, one-page processing and atomic checkpoint/lease contracts                              |
+| `application/authentication/`  | Login/session coordination, token-source port and atomic workspace activation                                   |
+| `infrastructure/`              | Graph, Entra, token-service and PostgreSQL adapters; SQL/unknown-provider shape mapping                         |
+| `presentation/http/`           | Capability-owned HTTP routes, input schemas, safe failures and explicit response mappers                        |
+| `composition/`                 | Configuration, adapter construction, mailbox-scoped assembly and process lifecycle                              |
+
+Presentation imports only supported Application APIs. Infrastructure implements inner-owned ports. Domain imports no outer code; Application imports no external package or concrete adapter. Capabilities expose explicit `index.ts` entries. Each use case receives the ports it needs, not an all-purpose store. Composition can aggregate those ports while wiring the single transactional PostgreSQL adapter; that adapter remains cohesive because one delta page, checkpoint, membership change and lease transition must commit together.
+
+Application jobs use camelCase. PostgreSQL aliases its columns on reads; HTTP deliberately maps to the existing snake_case job representation. Changing a persistence column or an HTTP representation does not redefine an application contract. This remains a read-only intake model: no artificial entity classes, assignment rules, frontend, or case model are claimed.
+
+`tests/architecture.test.ts` checks the resolved source graph recursively. `tests/architecture-mutations.test.ts` proves outward type imports, reexports, aliases, dynamic imports, private capability access, cycles and ambient I/O are rejected. Computed loading is forbidden. These checks are separate from behavioral tests and do not establish live tenant access or independent review.
 
 ## Authentication options
 

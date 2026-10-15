@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { tokenSource } from "../src/infrastructure/graph/auth.js";
+import { tokenSource } from "../src/infrastructure/authentication/entra/auth.js";
 
 test("MSAL adapter requests application scope and force-refresh only when required", async () => {
   const requests: unknown[] = [];

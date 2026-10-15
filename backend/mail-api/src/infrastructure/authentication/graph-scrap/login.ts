@@ -1,8 +1,10 @@
 import { z } from "zod";
-import type { LoginInput, MailboxLogin } from "../../application/session.js";
-import { IntakeError } from "../../domain/mail.js";
-import type { TokenSource } from "./auth.js";
-import { GraphProvider } from "./provider.js";
+import type {
+  LoginInput,
+  MailboxLogin,
+  AccessTokenSource,
+} from "../../../application/authentication/index.js";
+import { OperationError } from "../../../application/index.js";
 const responseSchema = z.object({
   accessToken: z.string().min(1).max(32768),
   tokenType: z.literal("Bearer"),
@@ -18,14 +20,14 @@ const claimsSchema = z.object({
   ]),
   scp: z.string(),
 });
-export class CapturedTokenSource implements TokenSource {
+export class CapturedTokenSource implements AccessTokenSource {
   constructor(
     private readonly accessToken: string,
     private readonly expiresAt: number,
   ) {}
   async token(forceRefresh = false) {
     if (forceRefresh || this.expiresAt <= Date.now() + 5000)
-      throw new IntakeError("authorization_required");
+      throw new OperationError("authorization_required");
     return this.accessToken;
   }
 }
@@ -65,8 +67,8 @@ export class ScrapMailboxLogin implements MailboxLogin {
       });
       if (!captured.ok) {
         if (captured.status === 409)
-          throw new IntakeError("interactive_required");
-        throw new IntakeError("authentication_failed");
+          throw new OperationError("interactive_required");
+        throw new OperationError("authentication_failed");
       }
       const token = responseSchema.parse(await captured.json());
       // Accept identity metadata only after Microsoft Graph accepts this token.
@@ -79,7 +81,7 @@ export class ScrapMailboxLogin implements MailboxLogin {
           headers: { Authorization: `Bearer ${token.accessToken}` },
         },
       );
-      if (!verified.ok) throw new IntakeError("authorization_required");
+      if (!verified.ok) throw new OperationError("authorization_required");
       const identity = z.object({ id: z.uuid() }).parse(await verified.json());
       const claims = claimsSchema.parse(
         JSON.parse(
@@ -98,17 +100,17 @@ export class ScrapMailboxLogin implements MailboxLogin {
             ["Mail.ReadBasic", "Mail.Read", "Mail.ReadWrite"].includes(s),
           )
       )
-        throw new IntakeError("authorization_required");
+        throw new OperationError("authorization_required");
       const source = new CapturedTokenSource(token.accessToken, expiry);
       return {
         tenantId: claims.tid,
         mailboxId: identity.id,
         expiresAt: new Date(expiry).toISOString(),
-        provider: new GraphProvider(source, identity.id, this.request),
+        tokens: source,
       };
     } catch (error) {
-      if (error instanceof IntakeError) throw error;
-      throw new IntakeError("authentication_failed");
+      if (error instanceof OperationError) throw error;
+      throw new OperationError("authentication_failed");
     }
   }
 }

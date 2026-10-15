@@ -1,6 +1,6 @@
 # Mail Dispatcher
 
-A read-only Microsoft Graph mailbox intake backend. The application is not production-ready and has not been tested against a live tenant.
+A read-only Microsoft Graph mailbox intake backend. `backend/mail-api/` implements mandatory Clean Architecture with capability-owned layers, application ports, explicit delivery/persistence mapping, and executable dependency rules. The application is not production-ready and has not been tested against a live tenant.
 
 ## Repository
 

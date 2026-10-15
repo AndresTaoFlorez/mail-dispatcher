@@ -2,15 +2,13 @@ import {
   ConfidentialClientApplication,
   type ClientCredentialRequest,
 } from "@azure/msal-node";
-import { IntakeError } from "../../domain/mail.js";
-export interface TokenSource {
-  token(forceRefresh?: boolean): Promise<string>;
-}
+import { OperationError } from "../../../application/index.js";
+import type { AccessTokenSource } from "../../../application/authentication/index.js";
 export function msalTokens(
   tenantId: string,
   clientId: string,
   clientSecret: string,
-): TokenSource {
+): AccessTokenSource {
   const client = new ConfidentialClientApplication({
     auth: {
       clientId,
@@ -30,7 +28,7 @@ interface CredentialClient {
   ): Promise<{ accessToken: string } | null>;
 }
 
-export function tokenSource(client: CredentialClient): TokenSource {
+export function tokenSource(client: CredentialClient): AccessTokenSource {
   return {
     async token(forceRefresh = false) {
       try {
@@ -41,7 +39,7 @@ export function tokenSource(client: CredentialClient): TokenSource {
         if (!result?.accessToken) throw new Error();
         return result.accessToken;
       } catch {
-        throw new IntakeError("authorization_required");
+        throw new OperationError("authorization_required");
       }
     },
   };

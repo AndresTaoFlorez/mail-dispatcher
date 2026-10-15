@@ -1,11 +1,10 @@
 import pg from "pg";
 import { z } from "zod";
-import { msalTokens } from "../infrastructure/graph/auth.js";
-import { GraphProvider } from "../infrastructure/graph/provider.js";
-import { ScrapMailboxLogin } from "../infrastructure/graph/scrap-auth.js";
-import { PostgresStore } from "../infrastructure/postgres/store.js";
-import { MailboxSession } from "../application/session.js";
-import { buildServer } from "../presentation/server.js";
+import { msalTokens } from "../infrastructure/authentication/entra/auth.js";
+import { ScrapMailboxLogin } from "../infrastructure/authentication/graph-scrap/login.js";
+import { MailboxSession } from "../application/authentication/index.js";
+import { buildServer } from "../presentation/http/index.js";
+import { openMailboxWorkspace, sessionOperations } from "./mailbox.js";
 const common = {
   DATABASE_URL: z.string().min(1),
   API_TOKEN: z.string().min(32),
@@ -54,14 +53,7 @@ async function main() {
         : undefined;
     const runtime = new MailboxSession(
       env.GRAPH_AUTH_MODE,
-      async (identity) => {
-        const store = new PostgresStore(
-          pool,
-          `${identity.tenantId}:${identity.mailboxId}`,
-        );
-        await store.register(identity.tenantId, identity.mailboxId);
-        return store;
-      },
+      (identity) => openMailboxWorkspace(pool, identity),
       login,
     );
     if (env.GRAPH_AUTH_MODE === "entra")
@@ -69,22 +61,20 @@ async function main() {
         tenantId: env.ENTRA_TENANT_ID,
         mailboxId: env.GRAPH_MAILBOX_ID,
         expiresAt: null,
-        provider: new GraphProvider(
-          msalTokens(
-            env.ENTRA_TENANT_ID,
-            env.ENTRA_CLIENT_ID,
-            env.ENTRA_CLIENT_SECRET,
-          ),
-          env.GRAPH_MAILBOX_ID,
+        tokens: msalTokens(
+          env.ENTRA_TENANT_ID,
+          env.ENTRA_CLIENT_ID,
+          env.ENTRA_CLIENT_SECRET,
         ),
       });
-    const app = buildServer(runtime, env.API_TOKEN, runtime);
+    const operations = sessionOperations(runtime);
+    const app = buildServer(operations, env.API_TOKEN, runtime);
     await app.listen({ host: "127.0.0.1", port: env.PORT });
     let stopped = false;
     const worker = (async () => {
       while (!stopped) {
         try {
-          if (await runtime.tick()) continue;
+          if (await operations.tick()) continue;
         } catch {
           console.error("sync_worker_failed");
         }

@@ -3,6 +3,11 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
+import {
+  checkArchitecture,
+  sourceFiles,
+  projectOptions,
+} from "./support/architecture.js";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 
@@ -21,7 +26,7 @@ test("the mailbox backend is isolated from the retired runtime", () => {
   }
   assert.equal(
     existsSync(
-      join(root, "backend/mail-api/src/infrastructure/graph/provider.ts"),
+      join(root, "backend/mail-api/src/infrastructure/mail/graph/provider.ts"),
     ),
     true,
   );
@@ -43,20 +48,16 @@ test("the mailbox backend is isolated from the retired runtime", () => {
   assert.equal("playwright" in dependencies, false);
 });
 
-test("domain and application imports do not depend on concrete adapters", () => {
-  for (const layer of ["domain", "application"]) {
-    for (const name of readdirSync(join(root, "backend/mail-api/src", layer))) {
-      if (!name.endsWith(".ts")) continue;
-      const source = readFileSync(
-        join(root, "backend/mail-api/src", layer, name),
-        "utf8",
-      );
-      assert.doesNotMatch(
-        source,
-        /from\s+["'][^"']*(?:infrastructure|presentation|@azure|fastify|\bpg\b)/,
-      );
-    }
-  }
+test("the complete resolved source graph obeys mandatory Clean boundaries", () => {
+  const src = join(root, "backend/mail-api/src");
+  assert.deepEqual(
+    checkArchitecture(
+      src,
+      sourceFiles(src),
+      projectOptions(join(root, "backend/mail-api/tsconfig.json")),
+    ),
+    [],
+  );
 });
 
 test("validation commands do not require deleted automation files", () => {

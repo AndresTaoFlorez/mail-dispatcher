@@ -47,3 +47,9 @@ A task here can request ordinary project work, but does not authorize production
 ### Legacy cleanup requested after the backend split
 
 - [x] CLEAN-01 — Remove the obsolete root Python API and redundant migration-plan document; keep `backend/mail-api/` as the mailbox API, preserve WDD, remove obsolete documentation/test instructions, and verify the cleanup before publishing to PR #1. Previous validation evidence above is historical; the removed Python integrity suite is not a current validation command. Cleanup validation: `npm run check` passed (mail-api 40 passed / six PostgreSQL skips; graph-scrap four passed / two browser skips), WDD 51 passed, documentation formatting and diff checks passed. The skipped integrations were not rerun for this deletion-only change.
+
+### Mandatory Clean Architecture in mail-api
+
+- [ ] ARCH-03 — Validate behavior with real disposable PostgreSQL and architectural mutation fixtures, inspect the actual diff, obtain independent candidate review if executable, and publish to the existing PR #1. Do not substitute a queued review task for an executed review.
+- [x] ARCH-02 — Implement capability ownership inside every layer, narrow application ports/use cases, pure mail policy, explicit HTTP/SQL mappers, authentication/mail separation, and a single outer composition root. Remove superseded flat modules rather than leaving compatibility shims.
+- [x] ARCH-01 — Make Clean Architecture a mandatory current project constraint in AGENTS and package documentation; use the local software-architecture Clean/backend guides as reference, not a future architectural option.

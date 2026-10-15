@@ -1,18 +1,29 @@
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
+import { OperationError } from "../../../application/index.js";
 import type {
-  IntakeStore,
-  Job,
+  FolderCatalog,
+  ConversationReader,
+  ConversationView,
+} from "../../../application/mail/index.js";
+import type {
+  SyncQueue,
+  JobReader,
+  SyncCheckpointStore,
+  SyncJob,
   ClaimedJob,
   SyncState,
-  Conversation,
-} from "../../application/ports.js";
-import {
-  IntakeError,
-  type Folder,
-  type ChangePage,
-} from "../../domain/mail.js";
-export class PostgresStore implements IntakeStore {
+  ChangePage,
+} from "../../../application/synchronization/index.js";
+import type { Folder } from "../../../domain/mail/index.js";
+export class PostgresMailboxStore
+  implements
+    FolderCatalog,
+    ConversationReader,
+    SyncQueue,
+    JobReader,
+    SyncCheckpointStore
+{
   constructor(
     private readonly pool: Pool,
     private readonly mailbox: string,
@@ -44,7 +55,7 @@ export class PostgresStore implements IntakeStore {
     );
     if (!result.rowCount) throw new Error("Mailbox identity mismatch");
   }
-  async discover(folders: Folder[]) {
+  async discover(folders: readonly Folder[]) {
     await this.transaction(async (c) => {
       for (const f of folders)
         await c.query(
@@ -61,7 +72,7 @@ export class PostgresStore implements IntakeStore {
       )
     ).rows;
   }
-  async enqueue(folder: string): Promise<Job | null> {
+  async enqueue(folder: string): Promise<SyncJob | null> {
     return this.transaction(async (c) => {
       const found = await c.query(
         "SELECT 1 FROM intake.folders WHERE mailbox_id=$1 AND id=$2",
@@ -75,22 +86,25 @@ export class PostgresStore implements IntakeStore {
       return (
         (
           await c.query(
-            "SELECT id,folder_id,status,pages,error_code FROM intake.jobs WHERE mailbox_id=$1 AND folder_id=$2 AND status IN ('queued','running')",
+            `SELECT id,folder_id AS "folderId",status,pages,error_code AS "errorCode" FROM intake.jobs WHERE mailbox_id=$1 AND folder_id=$2 AND status IN ('queued','running')`,
             [this.mailbox, folder],
           )
         ).rows[0] ?? null
       );
     });
   }
-  async jobs(): Promise<Job[]> {
+  async jobs(): Promise<SyncJob[]> {
     return (
       await this.pool.query(
-        "SELECT id,folder_id,status,pages,error_code FROM intake.jobs WHERE mailbox_id=$1 ORDER BY created_at DESC,id DESC LIMIT 100",
+        `SELECT id,folder_id AS "folderId",status,pages,error_code AS "errorCode" FROM intake.jobs WHERE mailbox_id=$1 ORDER BY created_at DESC,id DESC LIMIT 100`,
         [this.mailbox],
       )
     ).rows;
   }
-  async conversations(limit: number, offset: number): Promise<Conversation[]> {
+  async conversations(
+    limit: number,
+    offset: number,
+  ): Promise<ConversationView[]> {
     return (
       await this.pool.query(
         `SELECT m.conversation_id AS id, (array_agg(m.subject ORDER BY m.received_at DESC NULLS LAST,m.id))[1] AS subject, count(*)::integer AS "messageCount"
@@ -103,7 +117,7 @@ export class PostgresStore implements IntakeStore {
   async claim(): Promise<ClaimedJob | null> {
     return this.transaction(async (c) => {
       const result = await c.query(
-        `SELECT id,folder_id,status,pages,error_code FROM intake.jobs WHERE mailbox_id=$1 AND (status='queued' OR (status='running' AND lease_until < now())) ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1`,
+        `SELECT id,folder_id AS "folderId",status,pages,error_code AS "errorCode" FROM intake.jobs WHERE mailbox_id=$1 AND (status='queued' OR (status='running' AND lease_until < now())) ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1`,
         [this.mailbox],
       );
       if (!result.rowCount) return null;
@@ -115,7 +129,7 @@ export class PostgresStore implements IntakeStore {
       );
       await c.query(
         "INSERT INTO intake.sync_state(mailbox_id,folder_id,generation) VALUES($1,$2,$3) ON CONFLICT DO NOTHING",
-        [this.mailbox, job.folder_id, randomUUID()],
+        [this.mailbox, job.folderId, randomUUID()],
       );
       return { ...job, lease, status: "running" };
     });
@@ -125,13 +139,13 @@ export class PostgresStore implements IntakeStore {
       "SELECT 1 FROM intake.jobs WHERE id=$1 AND mailbox_id=$2 AND lease=$3 AND status='running' FOR UPDATE",
       [job.id, this.mailbox, job.lease],
     );
-    if (!result.rowCount) throw new IntakeError("lease_lost");
+    if (!result.rowCount) throw new OperationError("lease_lost");
   }
   async state(job: ClaimedJob): Promise<SyncState> {
     return (
       await this.pool.query(
-        "SELECT cursor,generation,full_sync FROM intake.sync_state WHERE mailbox_id=$1 AND folder_id=$2",
-        [this.mailbox, job.folder_id],
+        'SELECT cursor,generation,full_sync AS "fullSync" FROM intake.sync_state WHERE mailbox_id=$1 AND folder_id=$2',
+        [this.mailbox, job.folderId],
       )
     ).rows[0];
   }
@@ -140,7 +154,7 @@ export class PostgresStore implements IntakeStore {
       await this.owned(c, job);
       await c.query(
         "UPDATE intake.sync_state SET cursor=NULL,generation=$3,full_sync=true WHERE mailbox_id=$1 AND folder_id=$2",
-        [this.mailbox, job.folder_id, randomUUID()],
+        [this.mailbox, job.folderId, randomUUID()],
       );
     });
   }
@@ -151,7 +165,7 @@ export class PostgresStore implements IntakeStore {
         if (m.removed) {
           await c.query(
             "DELETE FROM intake.memberships WHERE mailbox_id=$1 AND folder_id=$2 AND message_id=$3",
-            [this.mailbox, job.folder_id, m.id],
+            [this.mailbox, job.folderId, m.id],
           );
           continue;
         }
@@ -168,21 +182,21 @@ export class PostgresStore implements IntakeStore {
         );
         await c.query(
           "INSERT INTO intake.memberships(mailbox_id,folder_id,message_id,generation) VALUES($1,$2,$3,$4) ON CONFLICT(mailbox_id,folder_id,message_id) DO UPDATE SET generation=excluded.generation",
-          [this.mailbox, job.folder_id, m.id, state.generation],
+          [this.mailbox, job.folderId, m.id, state.generation],
         );
       }
-      if (page.complete && state.full_sync)
+      if (page.complete && state.fullSync)
         await c.query(
           "DELETE FROM intake.memberships WHERE mailbox_id=$1 AND folder_id=$2 AND generation<>$3",
-          [this.mailbox, job.folder_id, state.generation],
+          [this.mailbox, job.folderId, state.generation],
         );
       await c.query(
         "UPDATE intake.sync_state SET cursor=$3,full_sync=$4 WHERE mailbox_id=$1 AND folder_id=$2",
         [
           this.mailbox,
-          job.folder_id,
+          job.folderId,
           page.cursor,
-          state.full_sync && !page.complete,
+          state.fullSync && !page.complete,
         ],
       );
       await c.query(

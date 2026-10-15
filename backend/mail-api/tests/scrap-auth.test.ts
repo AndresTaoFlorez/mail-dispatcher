@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   CapturedTokenSource,
   ScrapMailboxLogin,
-} from "../src/infrastructure/graph/scrap-auth.js";
+} from "../src/infrastructure/authentication/graph-scrap/login.js";
 const tenant = "00000000-0000-4000-8000-000000000001",
   id = "00000000-0000-4000-8000-000000000002",
   key = "synthetic-service-key-with-at-least-32-characters";

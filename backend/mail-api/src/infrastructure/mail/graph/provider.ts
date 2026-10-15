@@ -1,26 +1,28 @@
 import { z } from "zod";
-import type { MailProvider } from "../../application/ports.js";
+import { OperationError } from "../../../application/index.js";
+import type { FolderSource } from "../../../application/mail/index.js";
+import type {
+  MessageChangeSource,
+  MessageChange,
+} from "../../../application/synchronization/index.js";
+import type { AccessTokenSource } from "../../../application/authentication/index.js";
 import {
-  IntakeError,
+  messageMetadata,
+  isMailIdentifier,
   type Folder,
-  type MessageChange,
-} from "../../domain/mail.js";
-import type { TokenSource } from "./auth.js";
+} from "../../../domain/mail/index.js";
 const base = "https://graph.microsoft.com";
 const absent = Symbol("missing message");
 const folder = z.object({
-  id: z.string().min(1),
+  id: z.custom<string>(isMailIdentifier),
   displayName: z.string(),
   parentFolderId: z.string().optional(),
   childFolderCount: z.number().int().nonnegative(),
 });
 const message = z.object({
-  id: z.string().min(1),
-  conversationId: z.string().min(1),
-  subject: z
-    .string()
-    .nullable()
-    .transform((value) => value ?? ""),
+  id: z.custom<string>(isMailIdentifier),
+  conversationId: z.custom<string>(isMailIdentifier),
+  subject: z.string().nullable(),
   receivedDateTime: z.iso.datetime().nullable().optional(),
   isRead: z.boolean(),
 });
@@ -31,10 +33,10 @@ const collection = z.object({
 });
 const select =
   "id,conversationId,subject,receivedDateTime,isRead,parentFolderId";
-export class GraphProvider implements MailProvider {
+export class GraphProvider implements FolderSource, MessageChangeSource {
   private readonly prefix: string;
   constructor(
-    private readonly tokens: TokenSource,
+    private readonly tokens: AccessTokenSource,
     mailboxId: string,
     private readonly request: typeof fetch = fetch,
     private readonly sleep: (ms: number) => Promise<void> = (ms) =>
@@ -47,7 +49,7 @@ export class GraphProvider implements MailProvider {
     try {
       url = new URL(link, base);
     } catch {
-      throw new IntakeError("invalid_response");
+      throw new OperationError("invalid_response");
     }
     if (
       url.origin !== base ||
@@ -56,7 +58,7 @@ export class GraphProvider implements MailProvider {
       url.hash ||
       !url.pathname.startsWith(this.prefix)
     )
-      throw new IntakeError("invalid_response");
+      throw new OperationError("invalid_response");
     return url.href;
   }
   private async get(link: string, missingMessage = false): Promise<unknown> {
@@ -76,8 +78,8 @@ export class GraphProvider implements MailProvider {
           },
         });
       } catch (error) {
-        if (error instanceof IntakeError) throw error;
-        if (attempt === 3) throw new IntakeError("provider_unavailable");
+        if (error instanceof OperationError) throw error;
+        if (attempt === 3) throw new OperationError("provider_unavailable");
         await this.sleep(250 * 2 ** attempt);
         continue;
       }
@@ -85,7 +87,7 @@ export class GraphProvider implements MailProvider {
         try {
           return await response.json();
         } catch {
-          throw new IntakeError("invalid_response");
+          throw new OperationError("invalid_response");
         }
       }
       // A message can disappear between its delta record and partial-record hydration.
@@ -101,15 +103,15 @@ export class GraphProvider implements MailProvider {
           code.success &&
           code.data.error.code === "syncStateNotFound")
       )
-        throw new IntakeError("invalid_cursor");
+        throw new OperationError("invalid_cursor");
       if (response.status === 401 && !refreshed && attempt < 3) {
         refreshed = true;
         continue;
       }
       if (response.status === 401 || response.status === 403)
-        throw new IntakeError("authorization_required");
+        throw new OperationError("authorization_required");
       if (![429, 502, 503, 504].includes(response.status) || attempt === 3)
-        throw new IntakeError("provider_unavailable");
+        throw new OperationError("provider_unavailable");
       const raw = response.headers.get("retry-after");
       const wait =
         raw === null
@@ -119,14 +121,14 @@ export class GraphProvider implements MailProvider {
             : Math.max(0, Date.parse(raw) - Date.now());
       // Never cap Retry-After downwards and retry too early. Defer to a later explicit job instead.
       if (!Number.isFinite(wait) || wait > 30000)
-        throw new IntakeError("provider_unavailable");
+        throw new OperationError("provider_unavailable");
       await this.sleep(wait);
     }
-    throw new IntakeError("provider_unavailable");
+    throw new OperationError("provider_unavailable");
   }
   private async page(link: string) {
     const parsed = collection.safeParse(await this.get(link));
-    if (!parsed.success) throw new IntakeError("invalid_response");
+    if (!parsed.success) throw new OperationError("invalid_response");
     const page = parsed.data;
     if (page["@odata.nextLink"]) this.validate(page["@odata.nextLink"]);
     if (page["@odata.deltaLink"]) this.validate(page["@odata.deltaLink"]);
@@ -141,12 +143,12 @@ export class GraphProvider implements MailProvider {
     while (queue.length) {
       const url = queue.shift()!;
       if (visited.has(url) || visited.size >= 10000)
-        throw new IntakeError("invalid_response");
+        throw new OperationError("invalid_response");
       visited.add(url);
       const page = await this.page(url);
       for (const raw of page.value) {
         const parsed = folder.safeParse(raw);
-        if (!parsed.success) throw new IntakeError("invalid_response");
+        if (!parsed.success) throw new OperationError("invalid_response");
         const f = parsed.data;
         result.push({
           id: f.id,
@@ -170,17 +172,17 @@ export class GraphProvider implements MailProvider {
     const next = page["@odata.nextLink"],
       delta = page["@odata.deltaLink"];
     if (Boolean(next) === Boolean(delta))
-      throw new IntakeError("invalid_response");
-    if (next === cursor) throw new IntakeError("invalid_response");
+      throw new OperationError("invalid_response");
+    if (next === cursor) throw new OperationError("invalid_response");
     const changes: MessageChange[] = [];
     for (const raw of page.value) {
       const identity = z
         .object({
-          id: z.string().min(1),
+          id: z.custom<string>(isMailIdentifier),
           "@removed": z.object({ reason: z.string().optional() }).optional(),
         })
         .safeParse(raw);
-      if (!identity.success) throw new IntakeError("invalid_response");
+      if (!identity.success) throw new OperationError("invalid_response");
       if (identity.data["@removed"]) {
         changes.push({ id: identity.data.id, removed: true });
         continue;
@@ -199,15 +201,17 @@ export class GraphProvider implements MailProvider {
         parsed = message.safeParse(hydrated);
       }
       if (!parsed.success || parsed.data.id !== identity.data.id)
-        throw new IntakeError("invalid_response");
+        throw new OperationError("invalid_response");
       const m = parsed.data;
       changes.push({
-        id: m.id,
         removed: false,
-        conversationId: m.conversationId,
-        subject: m.subject,
-        receivedAt: m.receivedDateTime ?? null,
-        isRead: m.isRead,
+        ...messageMetadata({
+          id: m.id,
+          conversationId: m.conversationId,
+          subject: m.subject,
+          receivedAt: m.receivedDateTime ?? null,
+          isRead: m.isRead,
+        }),
       });
     }
     return { changes, cursor: (next ?? delta)!, complete: !next };

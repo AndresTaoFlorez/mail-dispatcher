@@ -30,13 +30,13 @@ The monorepo must have exactly these top-level responsibility areas (supporting 
 - `frontend/` — empty reservation; do not claim a frontend is implemented.
 - `database/` — PostgreSQL schema, migrations, seeds with synthetic data, and schema documentation.
 
-Keep the business rules independent of Fastify, React, Microsoft Graph, PostgreSQL, and transport schemas. Organize code by layer, then capability where useful. Define application ports and adapt external systems through infrastructure. Composition/bootstrap is the only place that wires concrete adapters.
+Keep the business rules independent of Fastify, React, Microsoft Graph, PostgreSQL, and transport schemas. Clean Architecture is mandatory for every change in `backend/mail-api/`, not a future migration option. Organize source by layer and then capability; use `domain/`, `application/`, `infrastructure/`, `presentation/`, and the outer `composition/` root. Define application ports and adapt external systems through infrastructure. Composition is the only place that selects and wires concrete adapters. HTTP delivery imports supported application entries only, never Domain or Infrastructure. Application owns required ports, operation contracts, and operational errors; Domain owns only mail meaning and invariants. Cross-capability consumers use explicit `index.ts` public entries, not private deep imports. Do not put SQL columns, Graph DTOs, framework types, or authentication failures in Domain.
 
 Do not introduce another `apps/backend` / `apps/frontend` root alongside these directories. Port business behavior deliberately into the existing layers rather than maintaining another application runtime.
 
 ## Microsoft Graph integration rules
 
-- Use Microsoft Graph's documented mail endpoints through `backend/mail-api/src/infrastructure/graph/`. Keep the provider behind application-owned ports; only bootstrap wires concrete adapters.
+- Use Microsoft Graph's documented mail endpoints through `backend/mail-api/src/infrastructure/mail/graph/`. Keep the provider behind application-owned ports; only bootstrap wires concrete adapters.
 - Prefer supported Entra/MSAL application access. Optional delegated tokens can be obtained through `graph-scrap` only for authorized accounts/flows; stop at MFA, consent, or policy challenges. Never bypass those controls or assume a captured token grants extra permissions.
 - Mailbox passwords may be forwarded transiently during explicit optional login only; never persist or log them. Keep browser automation out of `mail-api`, never use a host browser profile, and never reuse credentials for automatic renewal. A delegated access token has no assumed refresh token.
 - A read-only synchronization phase must precede mailbox mutations. Write operations require a deliberate, separately reviewed scope and the necessary permissions.
@@ -65,6 +65,10 @@ Do not introduce another `apps/backend` / `apps/frontend` root alongside these d
 7. Plan controlled adoption and historical data migration where justified. Keep the WDD reference until TypeScript behavioral parity has been verified; removal of the old root API does not establish assignment parity.
 
 Do not implement every stage in one PR. Stop and surface blockers when mailbox access, licensing, permissions, or expected behavior cannot be verified.
+
+## Architectural verification
+
+The mail-api test suite recursively resolves the complete TypeScript source dependency graph using its compiler configuration. It checks relative and alias imports, reexports, dynamic imports and type-only imports; rejects outward dependencies, private capability imports, cycles, ambient I/O in inner code, and computed module paths. Keep negative mutation fixtures proving each rule detects a real violation. Do not replace this with folder-name or regular-expression checks. HTTP mappers preserve the wire contract while persistence maps SQL rows into application-owned camelCase values.
 
 ## Validation and operational safety
 
