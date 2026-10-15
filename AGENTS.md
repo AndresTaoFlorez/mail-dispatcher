@@ -68,7 +68,7 @@ Do not implement every stage in one PR. Stop and surface blockers when mailbox a
 
 ## Architectural verification
 
-The mail-api test suite recursively resolves the complete TypeScript source dependency graph using its compiler configuration. It checks relative and alias imports, reexports, dynamic imports and type-only imports; rejects outward dependencies, private capability imports, cycles, ambient I/O in inner code, and computed module paths. Keep negative mutation fixtures proving each rule detects a real violation. Do not replace this with folder-name or regular-expression checks. HTTP mappers preserve the wire contract while persistence maps SQL rows into application-owned camelCase values.
+The mail-api test suite recursively resolves the complete TypeScript source dependency graph using its compiler configuration. It checks relative and alias imports, reexports, dynamic imports and type-only imports; rejects outward dependencies, private capability imports, cycles, direct `fetch`/`process` references in inner code, and computed module paths. Keep negative mutation fixtures proving each rule detects a real violation. Do not replace this with folder-name or regular-expression checks. The ambient-I/O guard does not yet cover every global access form (for example, console calls or bracket access to globalThis); inner I/O remains forbidden and those forms require review until the non-blocking coverage follow-up is implemented. HTTP mappers preserve the wire contract while persistence maps SQL rows into application-owned camelCase values.
 
 ## Validation and operational safety
 

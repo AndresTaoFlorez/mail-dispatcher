@@ -50,6 +50,10 @@ A task here can request ordinary project work, but does not authorize production
 
 ### Mandatory Clean Architecture in mail-api
 
-- [ ] ARCH-03 — Validate behavior with real disposable PostgreSQL and architectural mutation fixtures, inspect the actual diff, obtain independent candidate review if executable, and publish to the existing PR #1. Do not substitute a queued review task for an executed review.
+- [x] ARCH-03 — Validate behavior with real disposable PostgreSQL and architectural mutation fixtures, inspect the actual diff, obtain independent candidate review if executable, and publish to the existing PR #1. Do not substitute a queued review task for an executed review.
 - [x] ARCH-02 — Implement capability ownership inside every layer, narrow application ports/use cases, pure mail policy, explicit HTTP/SQL mappers, authentication/mail separation, and a single outer composition root. Remove superseded flat modules rather than leaving compatibility shims.
 - [x] ARCH-01 — Make Clean Architecture a mandatory current project constraint in AGENTS and package documentation; use the local software-architecture Clean/backend guides as reference, not a future architectural option.
+
+Evidence for ARCH-03: implementation `45c374bce6fa115607e71a9af44422c0a5690cc4` was published to PR #1 and its remote branch read back. Mail-api 65/65 passed, including seven real PostgreSQL tests; format/lint/typecheck/build and compiled-entry-point smoke passed; WDD 51 passed. API-design assessment completed at base `9396b5c`; independent editorial review of the exact implementation was non-blocking and reported no demonstrated runtime/wire/persistence regression. Its one P3 guard-coverage finding is tracked below. Live tenant access remains unverified.
+
+- [ ] ARCH-04 — Extend ambient-I/O negative fixtures and enforcement to statically named global property access and logging; the current guard covers direct fetch/process identifiers, not every global form. Independent review found no such violating call in the implemented inner code. Non-blocking follow-up; mandatory no-I/O policy remains unchanged.

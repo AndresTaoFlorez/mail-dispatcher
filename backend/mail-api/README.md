@@ -29,7 +29,7 @@ Presentation imports only supported Application APIs. Infrastructure implements 
 
 Application jobs use camelCase. PostgreSQL aliases its columns on reads; HTTP deliberately maps to the existing snake_case job representation. Changing a persistence column or an HTTP representation does not redefine an application contract. This remains a read-only intake model: no artificial entity classes, assignment rules, frontend, or case model are claimed.
 
-`tests/architecture.test.ts` checks the resolved source graph recursively. `tests/architecture-mutations.test.ts` proves outward type imports, reexports, aliases, dynamic imports, private capability access, cycles and ambient I/O are rejected. Computed loading is forbidden. These checks are separate from behavioral tests and do not establish live tenant access or independent review.
+`tests/architecture.test.ts` checks the resolved source graph recursively. `tests/architecture-mutations.test.ts` proves outward type imports, reexports, aliases, dynamic imports, private capability access, cycles and direct `fetch`/`process` references are rejected. Computed loading is forbidden. Other ambient global access forms are not yet fully covered by the guard; this is a known non-blocking enforcement gap, not permission for inner I/O. These checks are separate from behavioral tests and do not establish live tenant access or independent review.
 
 ## Authentication options
 
