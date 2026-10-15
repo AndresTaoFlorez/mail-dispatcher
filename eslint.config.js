@@ -10,7 +10,10 @@ export default ts.config(
     languageOptions: { globals: { ...globals.node, ...globals.browser } },
   },
   {
-    files: ["backend/src/domain/**/*.ts", "backend/src/application/**/*.ts"],
+    files: [
+      "backend/mail-api/src/domain/**/*.ts",
+      "backend/mail-api/src/application/**/*.ts",
+    ],
     rules: {
       "no-restricted-imports": [
         "error",
@@ -28,7 +31,7 @@ export default ts.config(
     },
   },
   {
-    files: ["backend/src/domain/**/*.ts"],
+    files: ["backend/mail-api/src/domain/**/*.ts"],
     rules: {
       "no-restricted-imports": [
         "error",

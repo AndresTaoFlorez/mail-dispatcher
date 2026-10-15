@@ -4,24 +4,24 @@
   "type": "module",
   "version": "0.1.0",
   "workspaces": [
-    "backend",
-    "frontend",
+    "backend/mail-api",
+    "backend/graph-scrap",
     "database"
   ],
   "engines": {
     "node": ">=24 <25"
   },
   "scripts": {
-    "dev:backend": "npm run dev -w backend",
-    "dev:frontend": "npm run dev -w frontend",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "test:postgres": "node --env-file=database/.env database/scripts/test-postgres.js",
-    "lint": "eslint backend/src backend/tests frontend/src database/scripts",
-    "format": "prettier --write backend frontend database package.json tsconfig.base.json eslint.config.js",
-    "format:check": "prettier --check backend frontend database package.json tsconfig.base.json eslint.config.js",
-    "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build"
+    "lint": "eslint backend database/scripts",
+    "format": "prettier --write backend database package.json tsconfig.base.json eslint.config.js",
+    "format:check": "prettier --check backend database package.json tsconfig.base.json eslint.config.js",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build",
+    "dev:mail-api": "npm run dev -w @mail-dispatcher/mail-api",
+    "dev:graph-scrap": "npm run dev -w @mail-dispatcher/graph-scrap"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

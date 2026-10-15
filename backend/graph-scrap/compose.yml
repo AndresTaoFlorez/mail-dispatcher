@@ -1,0 +1,22 @@
+name: mail-dispatcher-auth
+services:
+  graph-scrap:
+    build:
+      context: ../..
+      dockerfile: backend/graph-scrap/Dockerfile
+      target: runtime
+    environment:
+      GRAPH_SCRAP_API_KEY: ${GRAPH_SCRAP_API_KEY:?Set a separate random service key}
+      HOST: 0.0.0.0
+      PORT: 3101
+    ports:
+      - "127.0.0.1:3101:3101"
+    init: true
+    shm_size: 256mb
+    mem_limit: 1g
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL

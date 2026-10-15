@@ -3,12 +3,14 @@
 ## Read first
 
 1. Read `README.md` for product scope and current status.
-2. Read `docs/MIGRATION_PLAN.md` for migration order, evidence requirements, and open decisions.
+2. Read the shared `docs/PLAN.md` checkbox queue from bottom to top, preserving heading ancestry, indentation, dependencies, and explicit blockers. Then read `docs/MIGRATION_PLAN.md` for longer-term context.
 3. Inspect existing code and tests before proposing deletion, copying, or restructuring.
 
-**Current runtime:** `backend/`, `frontend/`, and `database/` implement a local read-only Microsoft Graph intake workflow. Microsoft Graph is the only mailbox integration. The remaining Python `api/` application/domain/persistence modules and `wdd/` are business-rule references, not a second running HTTP service. Do not claim live tenant validation, assignment parity, or production readiness.
+**Current runtime:** `backend/mail-api/` is the read-only Microsoft Graph mailbox API. `backend/graph-scrap/` is an optional isolated authentication/token service, not a mailbox collector. These are the only two directories under `backend/`. `frontend/` is reserved with no application. `database/migrations/` defines the current schema; historical root migrations were removed. The remaining Python `api/` application/domain/persistence modules and `wdd/` are business-rule references. Do not claim live tenant validation, assignment parity, or production readiness.
 
 Use Node.js 24 and the root npm workspace/lockfile. Run `npm ci`, `npm run check`, and explicit PostgreSQL tests against a disposable database. Run the preserved WDD tests and Python reference-integrity tests separately. The repository intentionally contains no GitHub automation directory; validation and deployment are explicit local operations.
+
+`docs/PLAN.md` is jointly edited by the maintainer and agent. Preserve human text, task IDs, title hierarchy, and unchecked work. Mark tasks only after real execution and append concise evidence. Do not regenerate the file on each turn or treat a checkbox as permission for production access, credential rotation, paid services, merge, or security-policy changes.
 
 ## Source of truth and working method
 
@@ -23,8 +25,9 @@ Use Node.js 24 and the root npm workspace/lockfile. Run `npm ci`, `npm run check
 
 The monorepo must have exactly these top-level responsibility areas (supporting `docs/` and tool configuration may also exist):
 
-- `backend/` — HTTP interface, application workflows, pure domain logic, mailbox/provider adapters, background synchronization, and tests.
-- `frontend/` — web presentation and interaction through the backend API.
+- `backend/mail-api/` — HTTP interface, application workflows, pure domain logic, mailbox/provider adapters, background synchronization, and tests.
+- `backend/graph-scrap/` — self-contained optional authentication service with its own Docker image and synthetic browser tests.
+- `frontend/` — empty reservation; do not claim a frontend is implemented.
 - `database/` — PostgreSQL schema, migrations, seeds with synthetic data, and schema documentation.
 
 Keep the business rules independent of Fastify, React, Microsoft Graph, PostgreSQL, and transport schemas. Organize code by layer, then capability where useful. Define application ports and adapt external systems through infrastructure. Composition/bootstrap is the only place that wires concrete adapters.
@@ -33,8 +36,9 @@ Do not introduce another `apps/backend` / `apps/frontend` root alongside these d
 
 ## Microsoft Graph integration rules
 
-- Use Microsoft Graph's documented mail endpoints through `backend/src/infrastructure/graph/`. Keep the provider behind application-owned ports; only bootstrap wires concrete adapters.
-- Decide the supported mailbox and permission model first: delegated versus application access, consent, tenant restrictions, token lifecycle, and least privilege. Favor supported OAuth/MSAL flows; do not collect account passwords.
+- Use Microsoft Graph's documented mail endpoints through `backend/mail-api/src/infrastructure/graph/`. Keep the provider behind application-owned ports; only bootstrap wires concrete adapters.
+- Prefer supported Entra/MSAL application access. Optional delegated tokens can be obtained through `graph-scrap` only for authorized accounts/flows; stop at MFA, consent, or policy challenges. Never bypass those controls or assume a captured token grants extra permissions.
+- Mailbox passwords may be forwarded transiently during explicit optional login only; never persist or log them. Keep browser automation out of `mail-api`, never use a host browser profile, and never reuse credentials for automatic renewal. A delegated access token has no assumed refresh token.
 - A read-only synchronization phase must precede mailbox mutations. Write operations require a deliberate, separately reviewed scope and the necessary permissions.
 - Use `@odata.nextLink` and `@odata.deltaLink` as opaque values; persist synchronization state per mailbox **and folder**, and recover safely after partial failure.
 - Handle 429 responses using `Retry-After`, bounded retries and backoff. Do not use unbounded concurrent requests or continuous full-folder scans.

@@ -6,7 +6,7 @@ if (!process.env.TEST_DATABASE_URL) {
 }
 const result = spawnSync(
   process.execPath,
-  ["--import", "tsx", "--test", "backend/tests/postgres.test.ts"],
+  ["--import", "tsx", "--test", "backend/mail-api/tests/postgres.test.ts"],
   { stdio: "inherit" },
 );
 if (result.error) throw result.error;

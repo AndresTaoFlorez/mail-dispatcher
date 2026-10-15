@@ -2,20 +2,22 @@
 
 ## Current direction
 
-Use Microsoft Graph as the only mailbox integration through backend infrastructure. The active monorepo is `backend/`, `frontend/`, and `database/`. Application/domain code owns provider-neutral contracts; bootstrap injects Graph/MSAL and PostgreSQL adapters. PR #1 contains the proposal and implementation together.
+Use Microsoft Graph as the only mailbox integration through backend infrastructure. The runtime monorepo is `backend/mail-api/`, `backend/graph-scrap/`, and `database/`. Application/domain code owns provider-neutral contracts; bootstrap injects Graph/MSAL and PostgreSQL adapters. PR #1 contains the proposal and implementation together.
 
-A local read-only intake milestone is implemented and tested with synthetic Graph data and real disposable PostgreSQL. Live tenant access, assignment migration, historical backfill, and production adoption remain pending. See [implementation decisions and limits](IMPLEMENTATION.md).
+A local read-only intake milestone is implemented and tested with synthetic Graph data and real disposable PostgreSQL. Live tenant access, assignment migration, historical backfill, and production adoption remain pending. See the shared [PLAN](PLAN.md) for decisions, remaining tasks, and validation limits.
+
+The frontend is reserved without an application. The historical root migration directory was removed; current schema migrations remain under `database/`. Concrete shared tasks and completion evidence live in [PLAN](PLAN.md); process those tasks bottom-up without flattening their headings.
 
 ## Delivered foundation
 
-- [x] TypeScript/Fastify backend, React/TypeScript frontend, and PostgreSQL migration project in one npm workspace.
-- [x] MSAL application-token boundary with fakes; no live authentication success claimed.
-- [x] Folder discovery, paginated delta retrieval, response normalization, and mailbox-scoped message identity.
-- [x] Durable messages, folder membership, conversation grouping, transactional checkpoints, and full-reset recovery.
-- [x] Durable asynchronous job status, deduplication, bounded retries, rate-limit handling, and stale-worker fencing.
-- [x] Read-only local API/console and formatting, lint, typecheck, tests, and build commands.
-- [x] Retire the former Python HTTP runtime and its collection-specific configuration/entry points; preserve assignment/domain/persistence references and WDD behavior.
-- [x] Remove the GitHub automation directory at the maintainer's request; run validation explicitly instead.
+- TypeScript/Fastify mailbox API, isolated optional token service, and PostgreSQL migration project in one npm workspace.
+- MSAL application-token boundary with fakes; no live authentication success claimed.
+- Folder discovery, paginated delta retrieval, response normalization, and mailbox-scoped message identity.
+- Durable messages, folder membership, conversation grouping, transactional checkpoints, and full-reset recovery.
+- Durable asynchronous job status, deduplication, bounded retries, rate-limit handling, and stale-worker fencing.
+- Read-only local API and formatting, lint, typecheck, tests, and build commands.
+- Retire the former Python HTTP runtime and its collection-specific configuration/entry points; preserve assignment/domain/persistence references and WDD behavior.
+- Remove the GitHub automation directory at the maintainer's request; run validation explicitly instead.
 
 ## Next milestones
 

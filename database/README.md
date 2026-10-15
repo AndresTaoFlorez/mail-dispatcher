@@ -1,6 +1,6 @@
 # Database
 
-PostgreSQL 18 owns the new `intake` schema. Use a fresh disposable database, not the legacy database. Root SQL and `../migrations/` are untouched and must not be run for this setup.
+PostgreSQL 18 owns the new `intake` schema. Use a fresh disposable database, not the legacy database. The historical root `migrations/` directory was removed. The root SQL snapshot is reference material and must not be run for this setup. Keep `database/migrations/`: it defines the current PostgreSQL intake schema.
 
 Copy `.env.example` to `.env`, replace the development password, and keep URLs consistent. From the root:
 
@@ -16,7 +16,7 @@ Compose starts only a local database on loopback port 55432. It does not deploy 
 
 `scripts/migrate.js` applies `migrations/001_intake.sql` and its checksum atomically under an advisory lock. Re-running verifies its checksum. Applied migrations are immutable; add another version instead of changing a deployed checksum. The initial runner knows version 1 only; extend its explicit ordered list when adding version 2. SQL uses LF line endings for stable cross-platform hashes.
 
-No legacy data migration or backfill is attempted. Rollback means stopping the new backend and returning to the unchanged legacy application. For disposable local data, remove only this Compose project's volume after confirming it is unneeded. For retained data, take an authorized backup and restore it rather than dropping schemas. No destructive rollback runs automatically.
+No legacy data migration or backfill is attempted. Rollback means stopping the new backend and restoring an authorized backup or returning to a previously reviewed application revision. For disposable local data, remove only this Compose project's volume after confirming it is unneeded. For retained data, take an authorized backup and restore it rather than dropping schemas. No destructive rollback runs automatically.
 
 ## Identity, consistency, retention
 
