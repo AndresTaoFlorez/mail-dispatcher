@@ -1,7 +1,14 @@
-# Frontend (planned)
+# Frontend
 
-This directory reserves the web application boundary of the Mail Dispatcher monorepo. **There is no frontend implementation here yet.**
+React/TypeScript local console. Lists folders, queues explicit sync, and displays recent jobs and the first 50 conversation groups. It consumes only the backend and receives no Graph tokens or database credentials.
 
-The proposed React/TypeScript interface will display synchronized work, assignment results, specialists, work windows, and job/error status. It must communicate with the backend API instead of accessing Graph tokens, Graph mail endpoints, or PostgreSQL directly.
+From the root:
 
-Define the first views only after read-only API contracts and privacy requirements are agreed. See [migration plan](../docs/MIGRATION_PLAN.md).
+- `npm run dev -w frontend`: Vite at `http://127.0.0.1:5173`; `/api` proxies to backend port 3100.
+- `npm run typecheck -w frontend`
+- `npm run test -w frontend`: HTTP adapter tests, not browser tests.
+- `npm run build -w frontend`: output in `frontend/dist/`.
+
+Enter the local backend token manually. It stays in React memory, never browser storage, and disappears on reload. Discovery contacts Graph; refresh reads PostgreSQL only. Refresh is explicit, not automatic polling. Subjects render as text, never message HTML.
+
+The backend runs separately. It does not automatically host the static build. Shared hosting, end-user sessions, assignments, and specialist management remain later work.

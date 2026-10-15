@@ -9,3 +9,11 @@ __pycache__/
 .env
 
 arch.md
+
+# Graph monorepo build and local state
+node_modules/
+**/dist/
+.env.*
+!.env.example
+coverage/
+*.tsbuildinfo

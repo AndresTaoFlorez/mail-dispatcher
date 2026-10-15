@@ -1,83 +1,52 @@
 # Mail Dispatcher
 
-An evolving mailbox intake and workload assignment platform. The intended system connects to authorized Microsoft 365 mailboxes through **Microsoft Graph**, keeps a consistent record of incoming work, and distributes cases across available specialists.
+A mailbox intake and workload assignment project migrating from Python/Playwright to Microsoft Graph.
 
-> **Project status: architecture transition.** The repository currently contains a working-area legacy Python/Playwright implementation. The Microsoft Graph monorepo described below is a **proposal, not a running replacement**. No migration or deployment has occurred.
+**Implemented:** a local read-only TypeScript/Fastify backend, React console, and PostgreSQL intake schema. Tests exercise fake Graph responses against real PostgreSQL. **Not yet verified against a live Microsoft tenant.** Python remains unchanged; there has been no production cutover.
 
-## Direction
+## Repository
 
-The next version aims to:
+- `backend/` — presentation → application → domain; Graph/MSAL and PostgreSQL adapters wired at bootstrap.
+- `frontend/` — React/TypeScript console consuming the backend only.
+- `database/` — transactional versioned migrations and local database setup.
+- `docs/` — [migration plan](docs/MIGRATION_PLAN.md) and [assessment and limits](docs/IMPLEMENTATION.md).
+- `api/`, `agent/`, `wdd/`, `migrations/` — preserved legacy implementation, not the new runtime.
 
-- Read folders, messages, and conversation metadata through Microsoft Graph instead of automating Outlook's web interface.
-- Synchronize mailbox changes incrementally and persist normalized records in PostgreSQL.
-- Keep workload assignment as a separate business capability, preserving the intent of the existing Weighted Deficit Dispatch (WDD) algorithm.
-- Provide a web interface for intake visibility, assignments, specialist availability, and processing status.
-- Make external operations observable, retryable where safe, and auditable without exposing mailbox contents in logs.
+## Local development
 
-Microsoft Graph is a provider integration, not the domain model. A conversation is an application-level aggregate of messages; it is **not** a Graph endpoint for moving whole conversations. Write operations must account for individual messages and permissions.
+Requires Node.js 24, npm, and PostgreSQL 18 (or Docker for the development database). Use a disposable database, never the legacy or production database.
 
-## Proposed monorepo
-
-```text
-mail-dispatcher/
-├── backend/            # Planned TypeScript/Fastify API, Graph adapter, jobs, and assignment logic
-├── frontend/           # Planned TypeScript/React web application
-├── database/           # Planned PostgreSQL schema and versioned migrations
-├── docs/
-│   └── MIGRATION_PLAN.md
-├── AGENTS.md           # Rules and implementation boundaries for coding agents
-└── README.md
+```sh
+npm ci
 ```
 
-These directories are **documentation placeholders**. They do not yet contain the new services or database migration scripts. Legacy source files remain in their existing locations until a separate, reviewed migration.
+1. Copy `database/.env.example` to `database/.env`; set its password and connection URLs consistently.
+2. Run `docker compose --env-file database/.env -f database/compose.yml up -d`.
+3. Run `npm run migrate -w database`. Re-running verifies the applied checksum without reapplying the migration.
+4. Copy `backend/.env.example` to `backend/.env`, configure the same database, and generate a separate random `API_TOKEN` of at least 32 characters. Example: `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"`.
+5. Configure an approved development Entra application and mailbox as described in [backend/README.md](backend/README.md). Automated tests require no Microsoft credentials.
+6. In separate terminals, run `npm run dev:backend` and `npm run dev:frontend`.
+7. Open `http://127.0.0.1:5173`, enter the local API token, discover folders, and queue an explicit read-only sync. Use **Refresh persisted state** to observe jobs and conversations.
 
-## Target architecture
+The backend binds only to `127.0.0.1:3100`. The frontend development proxy uses that address. These form one combined application, not independently deployed microservices. The static frontend build is not automatically served by the backend; shared hosting and end-user authentication are later work. Do not expose this local console publicly.
 
-```mermaid
-flowchart LR
-    UI["Web application"] --> HTTP["Backend HTTP interface"]
-    HTTP --> APP["Application workflows"]
-    JOBS["Synchronization worker"] --> APP
-    GRAPH["Microsoft Graph"] <--> ADAPTER["Graph adapter"]
-    ADAPTER <--> APP
-    APP --> DOMAIN["Domain: intake and WDD assignment"]
-    APP <--> DB[("PostgreSQL")]
+Sync reads metadata only: subjects, IDs, timestamps, and read status. It never fetches bodies or attachments, moves mail, marks messages read, creates cases, or assigns specialists. Server startup resumes previously queued jobs; a fresh database has no jobs until the operator queues one.
+
+## Validation
+
+```sh
+npm run check
+npm run test:postgres
 ```
 
-- **Backend:** TypeScript with Fastify is the proposed baseline. Define provider-neutral application ports for mailbox access and persistence; connect infrastructure implementations at bootstrap.
-- **Frontend:** React and TypeScript are proposed. It communicates with the backend, never directly with mailbox credentials or database connections.
-- **Database:** PostgreSQL owns durable synchronization cursors, normalized messages and conversations, specialist configuration, assignments, and operation history.
-- **Authentication:** use supported Microsoft Entra ID / OAuth flows with least-privilege delegated or application permissions, selected after the mailbox access scenario is confirmed. Do not automate sign-in or extract browser tokens.
+`check` runs formatting, lint, typechecking, tests, and both builds. Database tests skip unless `TEST_DATABASE_URL` is present. `test:postgres` loads the explicitly configured disposable database from `database/.env` and requires that URL. CI provides PostgreSQL, applies the migration twice, and runs database tests without skips.
 
-## Migration principles
+Preserved WDD tests, in a separate Python environment with pytest installed:
 
-1. Establish an authorized Microsoft Graph authentication path before implementing mailbox reads or writes.
-2. Prove folder/message retrieval and pagination; then implement per-folder delta synchronization and durable checkpoints.
-3. Preserve WDD behavior through characterization tests before deciding how to port its implementation.
-4. Introduce explicit idempotency keys, operation history, and recovery for assignment and mailbox changes.
-5. Cut over only after tests and operator-controlled validation; retire the Playwright path in a **later** change.
+```sh
+python -m pytest wdd/tests -q
+```
 
-The source of truth for execution order, constraints, and acceptance criteria is [the migration plan](docs/MIGRATION_PLAN.md). Coding agents must also read [AGENTS.md](AGENTS.md).
+Read [AGENTS.md](AGENTS.md) before editing. Legacy deployment and browser-automation instructions are not instructions for the new application. No deployment is part of this milestone.
 
-## Existing implementation (legacy)
-
-The current repository still contains:
-
-- `api/` — Python/Litestar HTTP service and assignment workflows.
-- `agent/` — Outlook Web browser automation using Playwright.
-- `wdd/` — pure-Python WDD engine and tests, including [its specification](wdd/ALGORITHM.md).
-- `migrations/` and `esquema_mailreceiver.sql` — existing database artifacts.
-
-The files `CLAUDE.md`, `DEPLOY.md`, `ENDPOINTS_MAP.md`, and `TODO.md` may describe the legacy workflow. They are not implementation instructions for the proposed Graph platform. Running the legacy application may still interact with a real mailbox; no Graph-backed quick-start command exists yet.
-
-## Status and references
-
-This is a public architectural proposal. Prior internal integrations and the earlier **TyFlow** prototype may inform design decisions, but they are not dependencies, and their source or operational settings are not included here.
-
-Official references:
-
-- [Microsoft Graph mail overview](https://learn.microsoft.com/en-us/graph/api/resources/mail-api-overview)
-- [Access Microsoft Graph on behalf of a user](https://learn.microsoft.com/en-us/graph/auth-v2-user)
-- [Incremental changes to messages in a folder](https://learn.microsoft.com/en-us/graph/delta-query-messages)
-- [Microsoft Graph throttling guidance](https://learn.microsoft.com/en-us/graph/throttling)
-- [Immutable Outlook identifiers](https://learn.microsoft.com/en-us/graph/outlook-immutable-id)
+Root `AGENTS.md` and `CLAUDE.md` still contain proposal-only status wording. Their protected updates were blocked by the local approval gate; correcting those entry points is a draft-PR blocker. The implementation status and commands above describe this branch, not an approved production replacement.

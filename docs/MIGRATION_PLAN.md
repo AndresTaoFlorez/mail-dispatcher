@@ -1,6 +1,6 @@
 # Microsoft Graph monorepo — migration proposal
 
-**Status:** proposed, documentation-only. No Graph-backed Mail Dispatcher release, code migration, schema migration, or production cutover is included in this PR.
+**Status:** the original proposal is the migration baseline. This implementation branch adds a local read-only intake milestone; see [implemented decisions and limits](IMPLEMENTATION.md). Live tenant validation, assignment migration, historical backfill, and production cutover remain pending.
 
 ## Problem and intended outcome
 
@@ -57,21 +57,21 @@ For any move, Graph operates on messages, not whole conversation aggregates. The
 ## Phases and acceptance checks
 
 ### Phase A — decisions and inventory
-- [ ] Map every active legacy capability to keep, replace, redesign, or retire.
+- [x] Map every active legacy capability to keep, replace, redesign, or retire.
 - [ ] Confirm tenant/mailbox types, Graph access eligibility, admin consent requirements, and retention constraints.
 - [ ] Decide identity scope, sync model, and whether ticket creation is in MVP.
-- [ ] Describe public-domain behavior with synthetic examples only.
+- [x] Describe public-domain behavior with synthetic examples only.
 
 ### Phase B — foundational monorepo
-- [ ] Introduce independently buildable `backend/` and `frontend/` projects and `database/` migrations.
-- [ ] Establish formatting, lint, typechecking, and automated tests.
-- [ ] Implement ports/adapters and dependency composition without mailbox access.
+- [x] Introduce independently buildable `backend/` and `frontend/` projects and `database/` migrations.
+- [x] Establish formatting, lint, typechecking, and automated tests.
+- [x] Implement ports/adapters and dependency composition without mailbox access.
 
 ### Phase C — read-only Graph intake
 - [ ] Supported login/token lifecycle and minimal read scopes, with test fakes.
-- [ ] Folder/message discovery and pagination; typed normalization and conversation grouping.
-- [ ] Delta synchronization, durable cursors, failure recovery, and 429 handling.
-- [ ] Persist state and expose read-only API/UI with no real-message fixtures in the repository.
+- [x] Folder/message discovery and pagination; typed normalization and conversation grouping.
+- [x] Delta synchronization, durable cursors, failure recovery, and 429 handling.
+- [x] Persist state and expose read-only API/UI with no real-message fixtures in the repository.
 
 ### Phase D — assignment and controlled operations
 - [ ] Prove WDD parity against legacy scenarios, including windows, weighted load, and escalations.

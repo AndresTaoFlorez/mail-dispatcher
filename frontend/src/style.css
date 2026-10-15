@@ -1,0 +1,21 @@
+body {
+  font-family: system-ui, sans-serif;
+  color: #172b4d;
+  background: #f5f7fb;
+  margin: 0;
+}
+main {
+  max-width: 64rem;
+  padding: 2rem;
+}
+input,
+button {
+  font: inherit;
+  padding: 0.5rem;
+}
+li {
+  margin-block: 0.75rem;
+}
+[role="alert"] {
+  color: #a11616;
+}
