@@ -10,7 +10,7 @@ A task here can request ordinary project work, but does not authorize production
 
 ### External authorization gates
 
-- [ ] SEC-03 — Obtain independent actual-candidate review. Blocked: no accepted specialist execution is available in this session.
+- [ ] SEC-03 — Complete independent review of remaining PR scope. The Clean Architecture increment received a non-blocking independent review at `45c374bce6fa115607e71a9af44422c0a5690cc4`; this does not certify the older optional browser-auth implementation or live-tenant readiness.
 - [ ] SEC-02 — Run an explicitly approved development-tenant smoke test and confirm scopes/consent/policy. Blocked: no real account or tenant authorization supplied. Synthetic browser tests are not live validation.
 - [ ] SEC-01 — Have an authorized operator rotate/revoke historically exposed credentials. Deleting the old diagnostic script did not erase its Git history. No values belong in this plan.
 
