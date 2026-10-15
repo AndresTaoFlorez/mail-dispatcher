@@ -9,7 +9,7 @@ const root = fileURLToPath(new URL("../../../", import.meta.url));
 test("the mailbox backend is isolated from the retired runtime", () => {
   for (const path of [
     "agent",
-    "api/presentation",
+    "api",
     "main.py",
     "litestar.toml",
     "Dockerfile.agent",

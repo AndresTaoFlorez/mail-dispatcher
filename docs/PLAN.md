@@ -43,3 +43,7 @@ A task here can request ordinary project work, but does not authorize production
 - [x] STR-03 — Remove the historical root `migrations/` directory, preserving `database/migrations/` for the current schema.
 - [x] STR-02 — Reserve `frontend/` without an application; retain only `.gitkeep` so Git can represent the folder. Remove its workspace, dependencies and development commands.
 - [x] STR-01 — Use one checkout named `mail-dispatcher` and exactly two backend service directories: `mail-api/` and `graph-scrap/`. Update all workspace/configuration/test paths.
+
+### Legacy cleanup requested after the backend split
+
+- [x] CLEAN-01 — Remove the obsolete root Python API and redundant migration-plan document; keep `backend/mail-api/` as the mailbox API, preserve WDD, remove obsolete documentation/test instructions, and verify the cleanup before publishing to PR #1. Previous validation evidence above is historical; the removed Python integrity suite is not a current validation command. Cleanup validation: `npm run check` passed (mail-api 40 passed / six PostgreSQL skips; graph-scrap four passed / two browser skips), WDD 51 passed, documentation formatting and diff checks passed. The skipped integrations were not rerun for this deletion-only change.

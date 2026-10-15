@@ -11,7 +11,7 @@ backend/
 frontend/         Reserved; no frontend application exists
 database/         Current PostgreSQL schema, migrations, and scripts
 docs/PLAN.md      Shared, bottom-up checkbox work queue
-api/, wdd/        Python business-rule references and WDD characterization
+wdd/              Python WDD behavioral reference and characterization tests
 ```
 
 There is one checkout at `D:\Projects\mail-dispatcher`. The former auxiliary worktree has been removed. Backend contains exactly the two service directories. The frontend contains only a Git reservation marker because Git cannot track an empty directory. Historical root `migrations/` were removed; `database/migrations/` remains required for the current database.
@@ -52,7 +52,6 @@ All mailbox operations remain Graph GET requests. There are no mailbox writes, a
 npm run check
 npm run test:postgres
 python -m pytest wdd/tests -q
-python -m unittest discover -s api/tests -v
 ```
 
 Database tests require an explicitly configured disposable `TEST_DATABASE_URL`; ordinary tests skip them when absent. The two Chromium tests run explicitly in the Docker verification image described in the service README, never against a real tenant. Tests with synthetic portals/tokens do not certify live Microsoft authentication or tenant consent.

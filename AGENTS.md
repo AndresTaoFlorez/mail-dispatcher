@@ -3,12 +3,12 @@
 ## Read first
 
 1. Read `README.md` for product scope and current status.
-2. Read the shared `docs/PLAN.md` checkbox queue from bottom to top, preserving heading ancestry, indentation, dependencies, and explicit blockers. Then read `docs/MIGRATION_PLAN.md` for longer-term context.
+2. Read the shared `docs/PLAN.md` checkbox queue from bottom to top, preserving heading ancestry, indentation, dependencies, and explicit blockers.
 3. Inspect existing code and tests before proposing deletion, copying, or restructuring.
 
-**Current runtime:** `backend/mail-api/` is the read-only Microsoft Graph mailbox API. `backend/graph-scrap/` is an optional isolated authentication/token service, not a mailbox collector. These are the only two directories under `backend/`. `frontend/` is reserved with no application. `database/migrations/` defines the current schema; historical root migrations were removed. The remaining Python `api/` application/domain/persistence modules and `wdd/` are business-rule references. Do not claim live tenant validation, assignment parity, or production readiness.
+**Current runtime:** `backend/mail-api/` is the read-only Microsoft Graph mailbox API. `backend/graph-scrap/` is an optional isolated authentication/token service, not a mailbox collector. These are the only two directories under `backend/`. `frontend/` is reserved with no application. `database/migrations/` defines the current schema; historical root migrations were removed. The legacy root Python API has been removed at the maintainer's request; `backend/mail-api/` is the only mailbox API. `wdd/` remains a behavioral reference, not an active assignment implementation. Do not claim live tenant validation, assignment parity, or production readiness.
 
-Use Node.js 24 and the root npm workspace/lockfile. Run `npm ci`, `npm run check`, and explicit PostgreSQL tests against a disposable database. Run the preserved WDD tests and Python reference-integrity tests separately. The repository intentionally contains no GitHub automation directory; validation and deployment are explicit local operations.
+Use Node.js 24 and the root npm workspace/lockfile. Run `npm ci`, `npm run check`, and explicit PostgreSQL tests against a disposable database. Run the preserved WDD tests separately. The repository intentionally contains no GitHub automation directory; validation and deployment are explicit local operations.
 
 `docs/PLAN.md` is jointly edited by the maintainer and agent. Preserve human text, task IDs, title hierarchy, and unchecked work. Mark tasks only after real execution and append concise evidence. Do not regenerate the file on each turn or treat a checkbox as permission for production access, credential rotation, paid services, merge, or security-policy changes.
 
@@ -62,7 +62,7 @@ Do not introduce another `apps/backend` / `apps/frontend` root alongside these d
 4. Add read-only mailbox discovery, paginated retrieval, delta checkpoints, error handling, and integration tests with fixtures.
 5. Introduce normalized PostgreSQL storage, deduplication, assignment parity tests, and a read-only operational view.
 6. Add explicitly authorized mutation workflows and a web interface, each with security and failure-recovery tests.
-7. Plan controlled adoption and historical data migration where justified. Retire remaining Python business references only after equivalent behavior has been verified.
+7. Plan controlled adoption and historical data migration where justified. Keep the WDD reference until TypeScript behavioral parity has been verified; removal of the old root API does not establish assignment parity.
 
 Do not implement every stage in one PR. Stop and surface blockers when mailbox access, licensing, permissions, or expected behavior cannot be verified.
 
