@@ -2,7 +2,7 @@
 
 ## Proposal review
 
-The seven files in proposal PR #1 were reviewed against the legacy collector, API, WDD engine, SQL, and tests. Its separation of messages, conversations, and assignments is sound. No material proposal correction was necessary. Implementation belongs in a stacked PR; a documentation proposal is not proof of a working replacement. This is coordinator assessment, not an independent specialist approval.
+The seven files in the original proposal were reviewed against the legacy collector, API, WDD engine, SQL, and tests. Its separation of messages, conversations, and assignments is sound. No material proposal correction was necessary. At the maintainer's request, the proposal and first read-only implementation are now consolidated in PR #1 rather than delivered as stacked PRs. A documentation proposal is not proof of a working replacement. This is coordinator assessment, not an independent specialist approval.
 
 ## Capability inventory
 
