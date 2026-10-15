@@ -16,8 +16,8 @@ A task here can request ordinary project work, but does not authorize production
 
 ## Delivery
 
-- [ ] PUB-02 — Read back PR #1 head/body, remote tree and branch state after publishing; no merge/deployment. Depends on PUB-01.
-- [ ] PUB-01 — Publish the current increment to the existing PR #1 branch, preserving commit history. Depends on VAL-02 and VAL-01.
+- [x] PUB-02 — Read back PR #1 head/body, remote tree and branch state after publishing; no merge/deployment. Depends on PUB-01. Evidence: GitHub REST PR/body, remote branch, and recursive tree read back at `80ba896251cff5b4e686f0bf4c02d8099e466112`; requested layout confirmed and PR #1 retained as draft. No merge or deployment.
+- [x] PUB-01 — Publish the current increment to the existing PR #1 branch, preserving commit history. Depends on VAL-02 and VAL-01.
 
 ## Validation boundary
 
