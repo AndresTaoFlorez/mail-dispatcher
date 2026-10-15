@@ -4,6 +4,7 @@ infrastructure/work_window_repository.py — CRUD for work_windows + active wind
 
 from __future__ import annotations
 
+import os
 import uuid
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -128,7 +129,6 @@ async def get_active_windows_now(
     timezone: str | None = None,
 ) -> list[WorkWindow]:
     """Return work windows that are active and cover the given datetime."""
-    from api.presentation.config import load_config
-    tz = timezone or load_config().get("timezone", "America/Bogota")
+    tz = timezone or os.getenv("WORKLOAD_TIMEZONE", "America/Bogota")
     windows = await get_work_windows(session, application_code=application_code, active_only=True)
     return [w for w in windows if is_window_active_now(w, now, tz)]

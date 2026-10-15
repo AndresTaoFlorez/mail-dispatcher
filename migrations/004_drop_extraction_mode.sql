@@ -1,2 +1,2 @@
--- Rollback: remove extraction_mode from folder_config (moved to scrape request param)
+-- Remove the unused extraction mode setting from folder configuration.
 ALTER TABLE folder_config DROP COLUMN IF EXISTS extraction_mode;

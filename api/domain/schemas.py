@@ -9,39 +9,6 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 
-# --- Scraping (used by agent) ---
-
-class EmailDate(BaseModel):
-    year: int | None = Field(default=None)
-    month: int | None = Field(default=None)
-    day: int | None = Field(default=None)
-    hour: int | None = Field(default=None)
-
-
-class ScrapedEmail(BaseModel):
-    conversation_id: str = Field(default="")
-    subject: str = Field(default="")
-    sender: str = Field(default="")
-    sender_email: str = Field(default="")
-    tags: str = Field(default="")
-    to_address: str = Field(default="")
-    body: str = Field(default="")
-    from_address: str = Field(default="")
-    date: EmailDate = Field(default_factory=EmailDate)
-
-
-class ScrapeResult(BaseModel):
-    status: str
-    application: str
-    folder: str
-    expected_unread_messages: int | None = None
-    scraped_conversations: int = 0
-    scroll_exhausted: bool = False
-    complete: bool = False
-    conversations: list[ScrapedEmail] = Field(default_factory=list)
-    new_saved: int = 0
-
-
 # Fields excluded from GET responses by default (heavy or internal).
 EXCLUDE_BY_DEFAULT: set[str] = {"body", "date", "conversation_id", "created_at"}
 

@@ -6,7 +6,9 @@
 2. Read `docs/MIGRATION_PLAN.md` for migration order, evidence requirements, and open decisions.
 3. Inspect existing code and tests before proposing deletion, copying, or restructuring.
 
-**This is a documentation-only transition branch.** Do not infer that the proposed services, Graph authentication, or new database schema already exist. A future implementation task requires its own explicitly scoped change. The current `api/`, `agent/`, `wdd/`, and legacy SQL files are preserved for analysis, not silently retired.
+**Current runtime:** `backend/`, `frontend/`, and `database/` implement a local read-only Microsoft Graph intake workflow. Microsoft Graph is the only mailbox integration. The remaining Python `api/` application/domain/persistence modules and `wdd/` are business-rule references, not a second running HTTP service. Do not claim live tenant validation, assignment parity, or production readiness.
+
+Use Node.js 24 and the root npm workspace/lockfile. Run `npm ci`, `npm run check`, and explicit PostgreSQL tests against a disposable database. Run the preserved WDD tests and Python reference-integrity tests separately. The repository intentionally contains no GitHub automation directory; validation and deployment are explicit local operations.
 
 ## Source of truth and working method
 
@@ -27,11 +29,11 @@ The monorepo must have exactly these top-level responsibility areas (supporting 
 
 Keep the business rules independent of Fastify, React, Microsoft Graph, PostgreSQL, and transport schemas. Organize code by layer, then capability where useful. Define application ports and adapt external systems through infrastructure. Composition/bootstrap is the only place that wires concrete adapters.
 
-Do not introduce another `apps/backend` / `apps/frontend` root alongside these directories. Do not move legacy code to the target directories in a documentation PR.
+Do not introduce another `apps/backend` / `apps/frontend` root alongside these directories. Port business behavior deliberately into the existing layers rather than maintaining another application runtime.
 
 ## Microsoft Graph integration rules
 
-- Use Microsoft Graph's documented mail endpoints; **no Outlook Web scraping, Playwright mail automation, or browser-session token extraction** in the target system.
+- Use Microsoft Graph's documented mail endpoints through `backend/src/infrastructure/graph/`. Keep the provider behind application-owned ports; only bootstrap wires concrete adapters.
 - Decide the supported mailbox and permission model first: delegated versus application access, consent, tenant restrictions, token lifecycle, and least privilege. Favor supported OAuth/MSAL flows; do not collect account passwords.
 - A read-only synchronization phase must precede mailbox mutations. Write operations require a deliberate, separately reviewed scope and the necessary permissions.
 - Use `@odata.nextLink` and `@odata.deltaLink` as opaque values; persist synchronization state per mailbox **and folder**, and recover safely after partial failure.
@@ -51,12 +53,12 @@ Do not introduce another `apps/backend` / `apps/frontend` root alongside these d
 ## Implementation sequence for Hermes / Codex
 
 1. Inventory legacy capabilities and tests, then record the replacement map and unresolved product decisions.
-2. Create minimal backend/frontend/database tooling in a **separate PR**; select workspace and package-management conventions once.
+2. Maintain the existing backend/frontend/database workspace and tooling. Publish bounded changes to the current PR unless the user requests another delivery strategy.
 3. Implement supported authentication with fake/test credentials and an isolated Graph adapter.
 4. Add read-only mailbox discovery, paginated retrieval, delta checkpoints, error handling, and integration tests with fixtures.
 5. Introduce normalized PostgreSQL storage, deduplication, assignment parity tests, and a read-only operational view.
 6. Add explicitly authorized mutation workflows and a web interface, each with security and failure-recovery tests.
-7. Plan a controlled cutover, migration of historical data where justified, and retirement of obsolete automation.
+7. Plan controlled adoption and historical data migration where justified. Retire remaining Python business references only after equivalent behavior has been verified.
 
 Do not implement every stage in one PR. Stop and surface blockers when mailbox access, licensing, permissions, or expected behavior cannot be verified.
 
@@ -64,5 +66,5 @@ Do not implement every stage in one PR. Stop and surface blockers when mailbox a
 
 - Use synthetic mailbox fixtures in automated tests. No live credentials or production mailbox changes without explicit authorization.
 - Verify pagination, replay/idempotency, 429/retry behavior, expired credentials, delta recovery, partial moves, and concurrency before feature acceptance.
-- No automatic production deployment, network changes, secret rotation, or database migration as a side effect of a documentation task.
+- No automatic production deployment, network changes, secret rotation, or database migration. An exposed historical credential requires an authorized operator to rotate it; deleting its current file does not erase Git history.
 - Before claiming a phase is complete, identify the files changed and commands/tests actually run.

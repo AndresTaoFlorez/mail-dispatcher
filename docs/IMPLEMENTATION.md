@@ -1,54 +1,39 @@
-# Read-only milestone: assessment and decisions
+# Microsoft Graph intake: decisions and limits
 
-## Proposal review
+## Runtime and architecture
 
-The seven files in the original proposal were reviewed against the legacy collector, API, WDD engine, SQL, and tests. Its separation of messages, conversations, and assignments is sound. No material proposal correction was necessary. At the maintainer's request, the proposal and first read-only implementation are now consolidated in PR #1 rather than delivered as stacked PRs. A documentation proposal is not proof of a working replacement. This is coordinator assessment, not an independent specialist approval.
+The TypeScript backend under `backend/` is the only running backend. Microsoft Graph v1.0 is the mailbox provider, implemented in `backend/src/infrastructure/graph/` and injected through application-owned ports. MSAL acquires application tokens using a tenant-approved development registration. Presentation and application code do not instantiate provider adapters; bootstrap composes the system.
 
-## Capability inventory
+The React frontend calls the backend only. PostgreSQL stores mailbox-scoped messages, folder membership, synchronization state, and jobs. One npm workspace and lockfile maintain these projects without separate authentication or queue services.
 
-| Existing area                                                                                    | Decision                                | First milestone / later work                                                                                                          |
-| ------------------------------------------------------------------------------------------------ | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Browser sessions, login, folder navigation, virtual scrolling, unread filtering, HTML extraction | Replace                                 | Graph reads replace the collection mechanism; browser source remains untouched                                                        |
-| Conversation persistence and paginated queries                                                   | Redesign                                | Mailbox-scoped message keys, independent folder membership, and grouped persisted read model implemented                              |
-| Application/mailbox registry                                                                     | Redesign                                | One explicitly configured tenant/mailbox connection; dynamic multi-mailbox configuration later                                        |
-| Folder-to-level and analyst-folder mapping                                                       | Preserve business intent                | Discovery implemented; eligibility/routing policies and configuration later                                                           |
-| Specialists and availability/work windows                                                        | Preserve                                | Later configuration migration; maintain active flags, schedule timezone, half-open time slots, and empty-schedule always-on semantics |
-| WDD weights, deficits, ties, transfers                                                           | Preserve with characterization          | Existing Python specification, engine, and 51 tests retained; no TypeScript assignment port or parity claim yet                       |
-| Assignment deduplication, reassignments, and tagged new cases                                    | Redesign transaction boundary           | No new assignments emitted; later case eligibility, unique constraints, locking, and event history required                           |
-| Ticket creation and assignment/ticket references                                                 | Preserve separately                     | Not required for read-only intake; migrate external references only after contract review                                             |
-| Watcher, background collection, operational status                                               | Replace progressively                   | Durable explicitly queued sync jobs implemented; recurring scheduling later                                                           |
-| Browser move operations, analyst redirects                                                       | Retire only after authorized equivalent | No mailbox mutations in this milestone; future commands operate on messages, not atomic conversations                                 |
-| Runtime scraping settings, screenshots, HTML artifacts, legacy deployment                        | Eventually retire                       | Not used by the new runtime; keep existing files until controlled cutover                                                             |
-| Legacy SQL migrations and historical data                                                        | Map, do not replay                      | New isolated schema; no legacy database access, migration, or backfill                                                                |
+The original proposal and implementation are consolidated in PR #1 at the maintainer's request. The previous Python HTTP runtime, its startup entry points, and its orchestration/configuration have been retired under the new Graph-only direction. The repository intentionally has no GitHub workflow/configuration directory. Checks are local commands, not automatic CI or deployment.
 
-The WDD engine assumes an already eligible pool and already unassigned case list. Availability and database deduplication are outside it. It sorts by deficit, then `last_updated`; exact ties retain input order, and it does not update that timestamp during a batch. Escalation implementation increments source deficit/decrements source assigned count, with inverse target changes. Some legacy comments describe the opposite sign. Future parity must characterize implementation as well as the specification, including exact ties, duplicate inputs, and schedule boundaries, rather than silently "correcting" behavior during translation.
+## Implemented behavior
 
-## Decisions that affect maintenance
+- Visible folder discovery walks descendants and collection pages. Hidden/search/archive semantics are not yet verified.
+- Read-only message delta follows opaque continuation links, requests immutable IDs, validates response shapes, hydrates partial records, and handles folder tombstones.
+- Continuations are constrained to the trusted Graph origin and configured mailbox. Redirects are disabled. The adapter issues GET requests only.
+- Each page and its checkpoint commit in one PostgreSQL transaction. Replay upserts message keys and memberships. Invalid cursors start a new full-sync generation; stale membership is pruned only on its terminal page.
+- Conversation groups are derived from stored messages with observed folder membership. They are not business cases or complete mailbox-wide threads unless all relevant folders have been synchronized.
+- Jobs are durable, with one active job per mailbox/folder, leased claims, stale-worker fencing, bounded retries, and safe error codes. Failed jobs resume from the last committed cursor when explicitly queued again.
+- The loopback-only console can discover folders, queue synchronization, and display persisted jobs/conversations. Starting a server resumes existing queued jobs but does not create a recurring mailbox schedule.
 
-- One npm workspace and lockfile; independent backend, frontend, database commands. Node 24. No queue broker, auth microservice, or premature shared package.
-- Provider-neutral application ports with infrastructure wired only at bootstrap. Frontend has a small HTTP adapter rather than speculative layers without business rules.
-- Supported MSAL application authentication for one approved development Microsoft 365 mailbox. Read-basic metadata access, no user passwords or token extraction. Reference integrations informed ports, persisted-query separation, paging, and test strategy only; no private source, operational settings, or data were copied.
-- Graph v1.0 via a small fetch adapter. It validates wire shapes, constrains continuation URLs to the configured mailbox and trusted origin, disallows redirects, and issues GET only.
-- Folder discovery walks visible nested folders and all pages. Hidden/search/archive semantics beyond that scope remain unverified. Message delta tracks each folder independently, with immutable IDs requested on every request.
-- A PostgreSQL transaction persists each page and checkpoint. Partial failures resume at the last committed page; replay upserts message keys and memberships. Invalid cursors trigger a controlled full-sync generation. Tombstones affect observed folder membership, not global message identity.
-- Conversation groups are derived from persisted messages across observed folders. They are not complete mailbox-wide threads unless all relevant folders were synchronized, and they are not business cases.
-- One active job per folder, leased claims, stale-worker fencing, safe status/error codes. No raw upstream errors, URLs, tokens, or message data in logs. No automatic discovery or periodic scheduling; previously queued jobs resume on startup.
-- Development-only loopback console with a separate operator token. This is not production authentication or hosting. No automatic production migrations, deployment, or mailbox changes.
+## Assignment behavior retained for migration
 
-## Verified scope and limitations
+`wdd/` and its existing tests remain unchanged. The Python `api/application/`, `api/domain/`, and `api/infrastructure/` modules retain assignment, specialist, work-window, ticket-reference, and historical persistence behavior for comparison. They are not registered in the TypeScript runtime and do not provide a second HTTP service. Collection-only DTOs and write paths have been removed. Historical SQL statements are retained; obsolete collection comments were made provider-neutral.
 
-Automated coverage includes fake Graph pagination and nested folders, partial-record hydration, tombstones, cursor validation, 401 refresh, 403 refusal, 429/transient retries, malformed responses, MSAL request/error boundaries, HTTP authorization and input bounds, real PostgreSQL rollback/replay/concurrent claims/lease fencing/full-resync reconciliation, and an HTTP → fake Graph → PostgreSQL → HTTP workflow. Frontend unit tests cover its HTTP adapter. A separate isolated-headless-Edge smoke test exercised the real built backend and Vite proxy: disabled unauthenticated controls, safely displayed 401 for a wrong local token, successful persisted-state refresh, no page errors, and no local/session storage credentials. The empty-state layout was visually inspected. No Graph request was made in that browser test.
+The WDD engine assumes an eligible pool and already-unassigned case list. Availability and database deduplication are outside it. It sorts by deficit and `last_updated`; exact ties retain input order, and that timestamp is not updated during a batch. Escalation increments source deficit/decrements source assigned count, with inverse target adjustments. Some older comments describe the opposite sign. A TypeScript port still needs parity tests for these details, weights, accumulated state, work windows, and transfers before assignment activation.
 
-No live tenant credentials were used. Administrator consent, mailbox restrictions, tenant policies, and live Graph behavior are external validation requirements. No production data was read. The public repository has no dependency on private reference services.
+## Validation boundary
 
-Independent specialist review is pending: canonical Bot Chat delivery was refused because that session is already owned by another window. No lock takeover, duplicate agent, or invented reviewer verdict was used. The implementation PR must stay draft until actual candidate review is obtained. Root `AGENTS.md` and `CLAUDE.md` status/command corrections are also blocked: the local protected-file approval timed out, so those files were not modified or bypassed. Their proposal-only wording is an outstanding consistency issue, not the implemented runtime status.
+Graph tests use synthetic responses, never tenant credentials. Tests cover pagination, nested folders, partial records, removals, cursor trust, 401 refresh, 403 refusal, rate limiting, transient retries, MSAL request/error boundaries, and HTTP access control. Real disposable-PostgreSQL tests exercise rollback, replay, concurrent claims, lease fencing, full-reset reconciliation, and HTTP-to-storage retrieval. Frontend adapter tests and a separately executed isolated-headless-browser smoke test cover local presentation integration, not live Graph access.
 
-Next stages: delegated user login if needed; approved tenant smoke test; production session/hosting/retention design; recurring synchronization, folder deletion reconciliation and worker heartbeat; persisted case eligibility; WDD TypeScript parity including windows, deficits, exact ties and transfers; transactional assignment deduplication; specialist configuration and richer UI; historical backfill and controlled cutover. Mailbox writes require separate authorization and tests. Legacy removal remains prohibited until behavioral equivalence is verified.
+Architecture and Python-reference tests check that retired entry points are absent, layer boundaries remain intact, and retained Python imports resolve without the removed HTTP layer. WDD behavioral tests remain the reference. See package READMEs for actual validation commands. No automated GitHub checks or deployment workflow are supplied.
 
-## Primary technical references
+## Security and remaining work
 
-- [Message delta and least-privilege permissions](https://learn.microsoft.com/en-us/graph/api/message-delta?view=graph-rest-1.0)
-- [Per-folder delta synchronization](https://learn.microsoft.com/en-us/graph/delta-query-messages)
-- [MSAL Node token acquisition](https://learn.microsoft.com/en-us/entra/msal/javascript/node/acquire-token-requests)
-- [Immutable Outlook identifiers](https://learn.microsoft.com/en-us/graph/outlook-immutable-id)
-- [Throttling and Retry-After](https://learn.microsoft.com/en-us/graph/throttling)
+A removed legacy diagnostic script contained embedded credentials. Treat those historical credentials as exposed: deleting the current file does not erase Git history or invalidate a credential. An authorized operator must rotate/revoke them. This change neither attempts that rotation nor rewrites repository history; no credential values or infrastructure endpoints are reproduced here.
+
+Independent candidate review and an authorized development-tenant smoke test remain pending. Verify admin consent, mailbox restrictions, token privileges and tenant policy before live reads. No production data or mailbox was accessed.
+
+The current console is not production end-user authentication or hosting. Production retention/purge, recurring synchronization, deleted-folder reconciliation, long-page worker heartbeats, delegated user login if needed, persisted case eligibility, WDD parity, specialist configuration, and historical backfill remain future work. Mailbox mutations require separate authorization and safe tests. No assignment is emitted by this read-only milestone.

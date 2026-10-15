@@ -17,7 +17,7 @@ The worker supports **single-tenant Microsoft 365 application access**, not inte
 
 Configure `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID`, `ENTRA_CLIENT_SECRET`, and the mailbox directory object ID in `GRAPH_MAILBOX_ID`. MSAL requests `https://graph.microsoft.com/.default`, caches app tokens in process, and refreshes once after a 401. Registration grants determine effective access: environment variables do not narrow an overprivileged registration. Keep secrets outside Git. Certificate credentials and delegated authorization-code/PKCE login are future options, not implemented features.
 
-No user-password endpoint, browser login, token scraping, or external auth microservice is used. The local operator presents a separate bearer `API_TOKEN`, not a Graph token. This is not production end-user authentication.
+Authentication uses supported MSAL token acquisition; there is no user-password endpoint or external authentication microservice. The local operator presents a separate bearer `API_TOKEN`, not a Graph token. This is not production end-user authentication.
 
 ## HTTP surface
 

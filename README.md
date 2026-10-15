@@ -1,8 +1,8 @@
 # Mail Dispatcher
 
-A mailbox intake and workload assignment project migrating from Python/Playwright to Microsoft Graph.
+A mailbox intake and workload assignment project using Microsoft Graph.
 
-**Implemented:** a local read-only TypeScript/Fastify backend, React console, and PostgreSQL intake schema. Tests exercise fake Graph responses against real PostgreSQL. **Not yet verified against a live Microsoft tenant.** Python remains unchanged; there has been no production cutover.
+**Implemented:** a local read-only TypeScript/Fastify backend, React console, and PostgreSQL intake schema. Tests exercise fake Graph responses against real PostgreSQL. **Not yet verified against a live Microsoft tenant.** Python assignment business references remain available for behavioral migration; there has been no production deployment.
 
 ## Repository
 
@@ -10,7 +10,9 @@ A mailbox intake and workload assignment project migrating from Python/Playwrigh
 - `frontend/` — React/TypeScript console consuming the backend only.
 - `database/` — transactional versioned migrations and local database setup.
 - `docs/` — [migration plan](docs/MIGRATION_PLAN.md) and [assessment and limits](docs/IMPLEMENTATION.md).
-- `api/`, `agent/`, `wdd/`, `migrations/` — preserved legacy implementation, not the new runtime.
+- `api/` — retained Python assignment/domain/persistence references, without an HTTP server or launcher.
+- `wdd/` — pure-Python assignment algorithm and behavioral tests.
+- `migrations/` — historical SQL references, not the new schema.
 
 ## Local development
 
@@ -39,14 +41,13 @@ npm run check
 npm run test:postgres
 ```
 
-`check` runs formatting, lint, typechecking, tests, and both builds. Database tests skip unless `TEST_DATABASE_URL` is present. `test:postgres` loads the explicitly configured disposable database from `database/.env` and requires that URL. CI provides PostgreSQL, applies the migration twice, and runs database tests without skips.
+`check` runs formatting, lint, typechecking, tests, and both builds. Database tests skip unless `TEST_DATABASE_URL` is present. `test:postgres` loads the explicitly configured disposable database from `database/.env` and requires that URL. There are intentionally no GitHub workflows. Run validation locally with PostgreSQL configured and check that no database tests were skipped.
 
 Preserved WDD tests, in a separate Python environment with pytest installed:
 
 ```sh
 python -m pytest wdd/tests -q
+python -m unittest discover -s api/tests -v
 ```
 
-Read [AGENTS.md](AGENTS.md) before editing. Legacy deployment and browser-automation instructions are not instructions for the new application. No deployment is part of this milestone.
-
-Root `AGENTS.md` and `CLAUDE.md` still contain proposal-only status wording. Their protected updates were blocked by the local approval gate; correcting those entry points is a draft-PR blocker. The implementation status and commands above describe this branch, not an approved production replacement.
+Read [AGENTS.md](AGENTS.md) before editing. Microsoft Graph is the only mailbox integration, implemented in backend infrastructure. No deployment is part of this milestone.

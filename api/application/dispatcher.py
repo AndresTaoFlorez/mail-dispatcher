@@ -191,8 +191,8 @@ async def _route_conversations(
 
         to_redirect.append({
             "thread_id": str(conv.id),
-            "conversation_id": conv.conversation_id,   # Outlook thread id (for the agent)
-            "source_folder": conv.folder,              # current Outlook folder to navigate to
+            "conversation_id": conv.conversation_id,   # provider conversation grouping identifier
+            "source_folder": conv.folder,              # source mailbox folder
             "especialist_id": str(assignment.especialist_id),
             "target_folder": target_folder,            # exact folder name to move to
             "subject": conv.subject,
@@ -417,7 +417,7 @@ async def dispatch_level(
         code_to_window, code_to_id, snapshots, load_pcts,
     )
 
-    # Build Outlook move list for newly assigned conversations
+    # Build proposed folder routes for newly assigned conversations
     new_moves: list[dict] = []
     for ar in report.assigned:
         conv = conv_by_id.get(ar.case_id)
@@ -438,7 +438,7 @@ async def dispatch_level(
             })
         else:
             logger.warning(
-                "No analyst folder for specialist %s app=%s — skipping Outlook move",
+                "No analyst folder for specialist %s app=%s — skipping folder routing hint",
                 ar.specialist_code, application_code,
             )
 
